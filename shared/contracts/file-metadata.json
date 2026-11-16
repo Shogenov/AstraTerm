@@ -1,0 +1,13 @@
+{
+  "permissions": [
+    [33184, "rw-r-----"],
+    [35309, "rwsr-xr-x"],
+    [17407, "rwxrwxrwt"],
+    [null, null]
+  ],
+  "birth_records": "1700000000\u0000/fixture/created.txt\u00000\u0000/fixture/unknown.txt\u00001700000001\u0000/fixture/quoted '\u0000",
+  "birth_times": {
+    "/fixture/created.txt": 1700000000,
+    "/fixture/quoted '": 1700000001
+  }
+}

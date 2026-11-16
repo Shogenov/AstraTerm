@@ -1,0 +1,58 @@
+{
+  "name": "AstraTerm",
+  "version": "0.10.20",
+  "session_schema_version": 2,
+  "protocols": [
+    "local",
+    "ssh",
+    "telnet",
+    "mosh",
+    "serial",
+    "rdp",
+    "vnc"
+  ],
+  "default_ports": {
+    "local": 0,
+    "ssh": 22,
+    "telnet": 23,
+    "mosh": 22,
+    "serial": 0,
+    "rdp": 3389,
+    "vnc": 5900
+  },
+  "group_ssh_fields": [
+    "username",
+    "port",
+    "key_file",
+    "identity_profile",
+    "jump_host",
+    "x11",
+    "compression",
+    "encoding"
+  ],
+  "vault_parameters": {
+    "version": 1,
+    "cipher": "AES-256-GCM",
+    "kdf": "PBKDF2-HMAC-SHA256",
+    "iterations": 600000,
+    "salt_bytes": 32,
+    "nonce_bytes": 12,
+    "tag_bytes": 16,
+    "maximum_bytes": 8388608
+  },
+  "backup_parameters": {
+    "version": 1,
+    "iterations": 600000,
+    "maximum_payload_bytes": 50331648,
+    "maximum_key_bytes": 2097152,
+    "maximum_keys": 256,
+    "extension": "astraterm-backup"
+  },
+  "update_parameters": {
+    "origin": "https://astraterminal.ru",
+    "feed_url": "https://astraterminal.ru/releases/latest.json",
+    "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAuP3hPA8nPOTAb3Suyg0l\ni4ikUzNUJYWnJ2oZdK7S1Ld85v3rwCslmcZ0ZBtBTvHDw9OYs1cAkgbNwpbWGdbo\nM30UdWmxtwXtl/19wrWl57rirkwP5GvY43lRcxrY9cc03uJWzES2ov8AsiDhQWHL\nqSLUdJAg84cdAtTo7tKqy/5wFhVCR0VN8zc5EUJSpDbs90sBAtM4c31BR+QaeGOZ\nEFAe2dR6WQzeDYAwnrP3CWFm1uKvTXWQhCYWeKzLUJxQGZ7JozgDtNIpbqvruKOq\niQB3dviE2eiqzUyxffH2A5YplUZE5MiCG5rAg9y0iFUVzVyJvsnPfKIbwCGoTYk2\ngKYr/rusF3RnOUEEjcZGr1aWaoMpXpeWj/bC2UIDQLNe0AeubFs+OLtaOlYAlklw\n2BVTMR4x8uB09lnrBW3w7Rj5HT8AQ9Yodirv7Nv6ZdI7dBynIMM0U4r2YzGysQfr\newfx3/s+prFCXnpoWxkrijY9g+UB7f+cHHXb1ju9i0MLAgMBAAE=\n-----END PUBLIC KEY-----\n",
+    "manifest_max_bytes": 131072,
+    "artifact_max_bytes": 536870912
+  }
+}

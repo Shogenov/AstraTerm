@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'"
+    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AstraTerm</title>
+    <link
+      rel="stylesheet"
+      href="../../node_modules/@xterm/xterm/css/xterm.css"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="titlebar">
+      <button
+        id="menu"
+        class="icon-button"
+        title="Меню AstraTerm"
+        aria-label="Меню AstraTerm"
+      ></button>
+      <span class="brand-mark">›_</span><strong class="brand">AstraTerm</strong>
+      <button id="connect" class="primary">+ Подключение</button>
+      <form id="quick-form" class="quick">
+        <span>⌁</span
+        ><input
+          id="quick"
+          placeholder="user@host:22"
+          aria-label="Быстрое SSH-подключение"
+          autocomplete="off"
+        />
+      </form>
+      <button
+        id="new-local"
+        class="icon-button"
+        title="PowerShell · Ctrl+Shift+T"
+        aria-label="Новый PowerShell"
+      ></button>
+      <button
+        id="split"
+        class="icon-button"
+        title="Разделить · Ctrl+Shift+E"
+        aria-label="Разделить терминал"
+      ></button>
+      <button
+        id="overview"
+        class="icon-button"
+        title="Все терминалы разных хостов"
+        aria-label="Все терминалы"
+        aria-pressed="false"
+      ></button>
+      <button
+        id="toggle-sidebar"
+        class="icon-button panel-toggle"
+        aria-controls="sidebar"
+        aria-pressed="true"
+        aria-label="Панель подключений"
+        title="Скрыть панель подключений"
+      ></button>
+      <button
+        id="toggle-files"
+        class="icon-button panel-toggle"
+        aria-controls="files-panel"
+        aria-pressed="true"
+        aria-label="Файловая панель"
+        title="Скрыть файловую панель"
+      ></button>
+      <button
+        id="multiexec"
+        class="multi-toggle"
+        aria-pressed="false"
+        title="Ввод только в отмеченные терминалы · Ctrl+Shift+M"
+      >
+        MultiExec
+      </button>
+      <div class="window-controls">
+        <button id="minimize" aria-label="Свернуть">─</button
+        ><button id="maximize" aria-label="Развернуть">□</button
+        ><button id="window-close" aria-label="Закрыть">×</button>
+      </div>
+    </header>
+    <div id="multi-bar" class="multi-bar" hidden>
+      <span id="multi-status"></span><button id="select-all">Выбрать все</button
+      ><button id="clear-all">Снять все</button
+      ><button id="multi-paste">Вставить</button
+      ><button
+        id="leave-overview"
+        class="icon-button"
+        aria-label="Вернуться к вкладкам"
+        title="Вернуться к вкладкам"
+      ></button>
+    </div>
+    <main>
+      <aside id="sidebar" class="sidebar">
+        <div class="section-heading">
+          <strong>Подключения</strong
+          ><span id="session-count" class="badge">0</span
+          ><button
+            id="new-group"
+            class="icon-button"
+            aria-label="Создать папку"
+            title="Создать папку подключений"
+          ></button>
+        </div>
+        <input
+          id="session-search"
+          class="search"
+          placeholder="Поиск"
+          aria-label="Поиск подключений"
+          autocomplete="off"
+        />
+        <nav id="sessions" aria-label="Подключения"></nav>
+        <div id="sessions-empty" class="empty-note" hidden>
+          Добавьте подключение или импортируйте сессии AstraTerm через меню.
+        </div>
+      </aside>
+      <div
+        class="resize-handle"
+        id="sidebar-resize"
+        role="separator"
+        aria-orientation="vertical"
+        tabindex="0"
+        title="Изменить ширину списка"
+      ></div>
+      <section id="center" class="center">
+        <div id="tabs" class="tabs" role="tablist" aria-label="Терминалы"></div>
+        <div id="find-bar" class="find-bar" hidden>
+          <input
+            id="find-text"
+            placeholder="Найти в терминале…"
+            aria-label="Поиск в терминале"
+          /><button id="find-prev">↑</button><button id="find-next">↓</button
+          ><button id="find-close">×</button>
+        </div>
+        <div id="workspace" class="workspace"></div>
+        <div id="empty-workspace" class="empty-workspace" hidden>
+          <span class="empty-symbol">›_</span>
+          <h1>Ваше рабочее пространство</h1>
+          <p>Откройте PowerShell или подключитесь к серверу.</p>
+          <button id="empty-connect" class="primary">Новое подключение</button>
+        </div>
+      </section>
+      <div
+        class="resize-handle"
+        id="files-resize"
+        role="separator"
+        aria-orientation="vertical"
+        tabindex="0"
+        title="Изменить ширину файловой панели"
+      ></div>
+      <aside id="files-panel" class="files-panel">
+        <div class="section-heading">
+          <strong id="files-title">Файлы</strong>
+          <div class="segments">
+            <button id="files-local" class="active">Локально</button
+            ><button id="files-sftp">SFTP</button>
+          </div>
+        </div>
+        <form id="path-form" class="path-form">
+          <button
+            type="button"
+            id="files-up"
+            class="icon-button"
+            title="На уровень выше"
+            aria-label="На уровень выше"
+          ></button
+          ><input
+            id="files-path"
+            aria-label="Путь к каталогу"
+            autocomplete="off"
+          /><button
+            id="files-refresh"
+            class="icon-button"
+            title="Обновить"
+            aria-label="Обновить"
+          ></button>
+        </form>
+        <div class="file-actions">
+          <button
+            id="file-upload"
+            class="icon-button"
+            title="Загрузить на сервер"
+            aria-label="Загрузить на сервер"
+          ></button
+          ><button
+            id="file-download"
+            class="icon-button"
+            title="Скачать файл"
+            aria-label="Скачать файл"
+          ></button
+          ><button
+            id="file-mkdir"
+            class="icon-button"
+            title="Создать каталог"
+            aria-label="Создать каталог"
+          ></button
+          ><button
+            id="file-rename"
+            class="icon-button"
+            title="Переименовать · F2"
+            aria-label="Переименовать"
+          ></button
+          ><button
+            id="file-delete"
+            class="icon-button destructive"
+            title="Удалить файл или пустой каталог"
+            aria-label="Удалить"
+          ></button
+          ><span id="file-spinner" class="spinner" hidden></span>
+        </div>
+        <div
+          id="file-list"
+          class="file-list"
+          role="listbox"
+          aria-label="Файлы"
+        ></div>
+        <p id="file-status" class="file-status"></p>
+      </aside>
+    </main>
+    <footer>
+      <span id="status" role="status">Готово</span
+      ><div id="host-stats" class="host-stats" hidden aria-label="Состояние активного хоста"></div><span id="cancel-drop">Отмена перетаскивания</span><span id="connection-info">Windows · ConPTY</span>
+    </footer>
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+    <script src="../../node_modules/@xterm/xterm/lib/xterm.js"></script>
+    <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+    <script src="../../node_modules/@xterm/addon-search/lib/addon-search.js"></script>
+    <script src="input-router.js"></script>
+    <script src="host-stats.js"></script>
+    <script src="file-sort.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

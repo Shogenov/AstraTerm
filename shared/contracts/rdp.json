@@ -1,0 +1,16 @@
+{
+  "native_input": {
+    "start_keys": [
+      {"name":"left","keysym":"Super_L","virtual":91,"scan":91,"screenshot":"start.png"},
+      {"name":"right","keysym":"Super_R","virtual":92,"scan":92,"screenshot":"start-right.png"}
+    ],
+    "run_key": {"keysym":"r","virtual":82,"scan":19},
+    "focus_cycles": 12,
+    "outside_rdp": "local",
+    "inside_rdp": "remote"
+  },
+  "sessions": [
+    {"input":{"protocol":"rdp","name":"Desktop","host":"desktop.example.test","username":"DOMAIN\\operator","port":3390,"rdp_domain":"DOMAIN","rdp_resolution":"1440x900","password":"contract-secret","_password":"contract-secret"},"expected":{"protocol":"rdp","port":3390,"rdp_domain":"DOMAIN","rdp_resolution":"1440x900"},"absent":["password","_password"]},
+    {"input":{"protocol":"rdp","host":"desktop.example.test","credential_profile":"desktop-account","rdp_resolution":"1280x800"},"expected":{"protocol":"rdp","port":3389,"credential_profile":"desktop-account"},"absent":["password"]}
+  ]
+}

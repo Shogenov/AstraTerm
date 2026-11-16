@@ -1,0 +1,33 @@
+{
+  "password": "Проверка копии 123",
+  "master_password": "Fixture vault password",
+  "credential": {
+    "id": "fixture-account",
+    "name": "Тестовая учётная запись",
+    "username": "fixture",
+    "protocol": "ssh",
+    "password": "fixture-password-only"
+  },
+  "sessions": {
+    "schema_version": 2,
+    "sessions": [
+      {"id": "fixture-ssh", "name": "SSH из копии", "host": "backup.test", "group": "Стенд", "credential_profile": "fixture-account", "key_file": "$KEY"},
+      {"id": "fixture-rdp", "name": "RDP из копии", "protocol": "rdp", "host": "win.test"},
+      {"id": "fixture-missing", "name": "Недоступный ключ", "host": "missing.test", "key_file": "$MISSING"}
+    ],
+    "groups": [
+      {"id": "fixture-group", "name": "Стенд", "ssh": {"identity_profile": "fixture-identity", "key_file": "$KEY"}}
+    ],
+    "macros": [{"id": "fixture-macro", "name": "Дата", "command": "date"}],
+    "tunnels": [{"id": "fixture-tunnel", "name": "TCP", "host": "backup.test", "type": "local", "key_file": "$KEY"}]
+  },
+  "identities": {
+    "schema": 1,
+    "schema_version": 1,
+    "default_id": "fixture-identity",
+    "configured": true,
+    "profiles": [{"id": "fixture-identity", "name": "Тестовый ключ", "key_file": "$KEY"}]
+  },
+  "sidebar": {"collapsed": ["fixture-group"]},
+  "logging": {"enabled": true, "level": "debug"}
+}

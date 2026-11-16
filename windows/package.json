@@ -1,0 +1,98 @@
+{
+  "name": "astraterm-windows",
+  "productName": "AstraTerm",
+  "version": "0.10.20",
+  "description": "Terminal and SSH workspace for Windows",
+  "author": "AstraTerm",
+  "private": true,
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "smoke": "electron . --smoke-test",
+    "dist": "electron-builder --win nsis portable zip",
+    "prestart": "node tools/build-native.cjs",
+    "presmoke": "node tools/build-native.cjs",
+    "predist": "node tools/build-native.cjs"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/addon-search": "0.16.0",
+    "@xterm/xterm": "6.0.0",
+    "iconv-lite": "0.7.0",
+    "node-pty": "1.1.0",
+    "ssh2": "1.17.0",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "ru.astraterm.desktop",
+    "electronDist": "node_modules/electron/dist",
+    "downloadAlternateFFmpeg": true,
+    "extraResources": [
+      {
+        "from": "../docs/THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      }
+    ],
+    "productName": "AstraTerm",
+    "artifactName": "AstraTerm-${version}-Windows-${arch}.${ext}",
+    "directories": {
+      "output": "../dist/windows"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json",
+      "native/AstraTerm.RdpHost.exe"
+    ],
+    "asarUnpack": [
+      "src/update-install.ps1",
+      "src/update-launch.ps1",
+      "src/backend/host-stats.ps1",
+      "src/backend/mobaxterm-dpapi.ps1",
+      "node_modules/node-pty/**",
+      "native/AstraTerm.RdpHost.exe"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/astraterm.ico",
+      "signExecutable": false
+    },
+    "nsis": {
+      "artifactName": "AstraTerm-${version}-Windows-${arch}-Setup.${ext}",
+      "include": "build/installer.nsh",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "differentialPackage": false
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    }
+  }
+}

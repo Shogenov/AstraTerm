@@ -1,0 +1,3 @@
+scripts/*.sh text eol=lf
+scripts/astraterm text eol=lf
+scripts/astraterm-askpass text eol=lf

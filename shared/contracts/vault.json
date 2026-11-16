@@ -1,0 +1,35 @@
+{
+  "description": "Python-produced synthetic AES-GCM cross-platform fixture. Never contains user credentials.",
+  "master": "TEST_ONLY_master_password",
+  "master_management": {
+    "wrong": "TEST_ONLY_wrong_master",
+    "changed": "TEST_ONLY_новый_master",
+    "reset": "TEST_ONLY_reset_master"
+  },
+  "credential": {
+    "id": "fixture",
+    "name": "Synthetic profile",
+    "username": "ops",
+    "password": "TEST_ONLY_secret_é=汉字"
+  },
+  "document": {
+    "version": 1,
+    "cipher": "AES-256-GCM",
+    "kdf": "PBKDF2-HMAC-SHA256",
+    "iterations": 600000,
+    "salt": "4mEFg67tPu8HDxH433qeZWjD8WOVNdnWNPrmfPLQK+E=",
+    "nonce": "D8cQpA6aTj7ZhMSE",
+    "tag": "idO4LQOYVp2JByRXUYFXwQ==",
+    "ciphertext": "CZDE82lfDcSq/mErpA7GDdfJsVgZghwh3mpMhyD9oKNeylJJ/vh+D8YypGpUHYRMi5BkQNu7H67St7W24g4aRV5QWu0SbvpF6PJE9tv8gTFn6tRRLLHw6lCPIngTNkhsIrCzogE9b2ZibyM7h1oEZ4Y0CSTSUttjHMCHDtuW"
+  },
+  "windows_document": {
+    "version": 1,
+    "cipher": "AES-256-GCM",
+    "kdf": "PBKDF2-HMAC-SHA256",
+    "iterations": 600000,
+    "salt": "MnH1X/jliG8hyMkN+eMgNky2rY0peuAg+AChYaAkPBI=",
+    "nonce": "R039NegrCTRPoJb5",
+    "tag": "5q6LKUKo1XwGMEkAABiyAg==",
+    "ciphertext": "Lj8+vF5F0NJfOaealjSTKDlzk/8s7Fw8b+scaHOsKXK1lJ8GxztadsatZIYGB8adnPo4GlRZJsOQOAWniczgR7mjhSyZWphS+AuTjAvUAuIBCJ1W+y1FAS1NKYt0T62p6VGed4/iE3HVwB+73H+5lJiBbbmTkA=="
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "key_generation": {
+    "algorithms": [
+      {"algorithm":"ed25519","public_type":"ssh-ed25519","filename":"id_astra_ed25519","protected":true},
+      {"algorithm":"rsa","public_type":"ssh-rsa","filename":"id_astra_rsa","protected":false}
+    ],
+    "invalid_filenames": ["../id_astra","id_astra.pub","id_astra/key","id_astra\\key","id_astra\n"]
+  },
+  "duplicate": {
+    "source": {"id":"original","name":"Сервер","group":"Prod","host":"node.example","username":"operator","port":2222,"identity_profile":"key-1","credential_profile":"login-1","inherit_group_ssh":true},
+    "other_group_name":"Сервер (1)",
+    "expected":["Сервер (1)","Сервер (2)","Сервер (3)"]
+  },
+  "valid": [
+    {"name":"ssh-defaults","input":{"id":"ssh1","host":"node.example"},"expected":{"protocol":"ssh","port":22,"encoding":"UTF-8","compression":true,"inherit_group_ssh":true}},
+    {"name":"explicit-profile-and-unicode","input":{"id":"ssh2","host":"node.example","name":"Сервер","identity_profile":"key-1","encoding":"CP866","password":"fixture-secret","passphrase":"fixture-secret"},"expected":{"name":"Сервер","identity_profile":"key-1","encoding":"CP866"},"absent":["password","passphrase"]},
+    {"name":"jump-chain","input":{"host":"node.example","jump_host":"admin@gateway.example:2222,operator@[::1]:2200"},"expected":{"jump_host":"admin@gateway.example:2222,operator@[::1]:2200"}},
+    {"name":"stored-linux-protocol","input":{"protocol":"mosh","host":"node.example"},"expected":{"protocol":"mosh","port":22}},
+    {"name":"stored-rdp","input":{"protocol":"rdp","host":"rdp.example"},"expected":{"protocol":"rdp","port":3389}},
+    {"name":"serial-metadata","input":{"protocol":"serial","serial_device":"/dev/ttyS0","baud":9600},"expected":{"protocol":"serial","port":0,"baud":9600}}
+  ],
+  "invalid": [
+    {"name":"empty-protocol","input":{"host":"node.example","protocol":""}},
+    {"name":"null-protocol","input":{"host":"node.example","protocol":null}},
+    {"name":"host-option","input":{"host":"-oProxyCommand=command"}},
+    {"name":"host-shell","input":{"host":"node.example; command"}},
+    {"name":"boolean-port","input":{"host":"node.example","port":true}},
+    {"name":"unknown-encoding","input":{"host":"node.example","encoding":"invented-encoding"}}
+  ],
+  "documents": [
+    {"name":"v1-keeps-own-settings","document":{"schema_version":1,"groups":[{"id":"g1","name":"Prod","ssh":{"username":"group-user","port":2222}}],"sessions":[{"id":"old","host":"node.example","group":"Prod","username":"own-user","port":22}]},"session":"old","expected":{"username":"own-user","port":22,"inherit_group_ssh":false}},
+    {"name":"v2-nested-overrides","document":{"schema_version":2,"groups":[{"id":"g1","name":"Prod","ssh":{"username":"group-user","port":2222}},{"id":"g2","name":"Prod/DB","ssh":{"port":2200,"compression":false}}],"sessions":[{"id":"new","host":"db.example","group":"Prod/DB","inherit_group_ssh":true}]},"session":"new","expected":{"username":"group-user","port":2200,"compression":false,"host":"db.example"}}
+  ]
+}

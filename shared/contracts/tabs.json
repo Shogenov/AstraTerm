@@ -1,0 +1,119 @@
+{
+  "description": "Drop moves the entire source tab to the right of the target, preserving terminal handles; middle closes the whole tab without confirmation.",
+  "rangeSelection": {
+    "text": "0123456789",
+    "columns": [2, 7],
+    "expected": "23456"
+  },
+  "merges": [
+    {
+      "name": "single tabs",
+      "target": [
+        "a"
+      ],
+      "source": [
+        "b"
+      ],
+      "expected": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "name": "split tabs",
+      "target": [
+        "a",
+        "b"
+      ],
+      "source": [
+        "c",
+        "d"
+      ],
+      "expected": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ]
+    }
+  ],
+  "rejected": [
+    "same-tab",
+    "closed-source",
+    "closed-target"
+  ],
+  "middle_close": {
+    "confirm": false,
+    "close_all_panes": true,
+    "other_tabs_unchanged": true
+  },
+  "side_panels": [
+    {"toggle": "left", "left": false, "right": true, "grows": true},
+    {"toggle": "right", "left": false, "right": false, "grows": true},
+    {"toggle": "left", "left": true, "right": false, "grows": false},
+    {"toggle": "right", "left": true, "right": true, "grows": false}
+  ],
+  "terminal_viewport": {
+    "sizes": [[1024, 690], [1024, 704], [1024, 718]],
+    "zoom_steps": [0, 5]
+  },
+  "separate": {
+    "panes": [
+      "a",
+      "b",
+      "c"
+    ],
+    "detached": "b",
+    "remaining": [
+      "a",
+      "c"
+    ],
+    "menu_plain": [
+      "Дублировать вкладку",
+      "Переподключиться",
+      "Закрыть текущую вкладку",
+      "Закрыть все",
+      "Закрыть все кроме текущей",
+      "В отдельное окно"
+    ],
+    "menu_merged": [
+      "Дублировать вкладку",
+      "Переподключиться",
+      "Закрыть текущую вкладку",
+      "Закрыть все",
+      "Закрыть все кроме текущей",
+      "В отдельное окно",
+      "Разъединить все"
+    ]
+  },
+  "session_actions": {
+    "duplicate": "new-connections-entire-clicked-tab",
+    "reconnect": "all-panes-of-clicked-tab",
+    "settings": "latest-saved-settings-and-group-inheritance",
+    "duplicate_selection": false,
+    "preserve_other_tabs": true,
+    "protocol_change": "open-new-tab"
+  },
+  "floating": {
+    "menu_docked": "В отдельное окно",
+    "menu_floating": "Вернуть во вкладки",
+    "close_window": "return-to-tab",
+    "merged": {
+      "panes": ["a", "b", "c", "d"],
+      "sizes": [[1024, 690], [1200, 760], [960, 620]],
+      "width_tolerance": 8
+    },
+    "preserves": [
+      "process",
+      "generation",
+      "history",
+      "pane-object",
+      "recipients"
+    ],
+    "protocols": [
+      "local",
+      "ssh",
+      "rdp"
+    ]
+  }
+}

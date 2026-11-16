@@ -1,0 +1,88 @@
+{
+  "description": "Synthetic import vectors. All passwords and hosts are deliberately fake.",
+  "master": "TEST_ONLY_master_password",
+  "cases": [
+    {
+      "name": "Moba named profiles and endpoint port",
+      "files": {
+        "sessions.mxtsessions": "[Bookmarks]\nSubRep=Lab\\Production\nImgNum=41\nWeb=#109#0%web.example.invalid%22%[Shared]%%0%-1%%%%%%%%%%%%%0%%%%%%%%%%%%%%%%%#font%10#0# #-1\nDatabase=#109#0%db.example.invalid%22%[Shared]%%0%-1%%%%%%%%%%%%%0%%%%%%%%%%%%%%%%%#font%10#0# #-1\nOther port=#109#0%edge.example.invalid%2222%ops%%0%-1%%%%%%%%%%%%%0%%%%%%%%%%%%%%%%%#font%10#0# #-1\nDesktop=#109#4%rdp.example.invalid%3389%[Windows]%%0%-1%%%%%%%%%%%%%0%%%%%%%%%%%%%%%%%#font%10#0# #-1\nMissing=#109#0%missing.example.invalid%22%[Absent]%%0%-1%%%%%%%%%%%%%0%%%%%%%%%%%%%%%%%#font%10#0# #-1\nLocal WSL=#109#14%%22%%%0%-1%%%%%%%%%%%%%0%%%%%%%%%%%%%%%%%#font%10#0# #-1\n",
+        "passwords.txt": "Shared(ops) = TEST_ONLY_alpha=equals \nWindows(LAB\\operator) = TEST_ONLY_rdp\nssh2222:ops@edge.example.invalid = TEST_ONLY_port\n"
+      },
+      "sessions": 5,
+      "credentials": 3,
+      "groups": 2,
+      "missing": 1
+    },
+    {
+      "name": "Termius CSV quoting",
+      "files": {
+        "hosts.csv": "Label,Address,Port,Protocol,Username,Password,Group\r\n\"Web, blue\",node.example.invalid,2200,ssh,ops,\"TEST_ONLY_a,b\"\"c=\",Lab/Apps\r\nDesktop,desktop.example.invalid,3389,rdp,operator,,Lab\r\n"
+      },
+      "sessions": 2,
+      "credentials": 1,
+      "groups": 2,
+      "missing": 0
+    },
+    {
+      "name": "Asbru partial YAML",
+      "files": {
+        "asbru.yml": "---\n__PAC__EXPORTED__:\n  children: {g: 1}\ng:\n  _is_group: 1\n  name: Lab\n  parent: __PAC__EXPORTED__\n  children: {a: 1, d: 1}\na:\n  name: SSH exported\n  parent: g\n  method: SSH\n  ip: node.example.invalid\n  port: 2222\n  user: ops\n  pass: TEST_ONLY_asbru\n  expect: []\nd:\n  name: Desktop exported\n  parent: g\n  method: RDP\n  ip: desktop.example.invalid\n  port: 3389\n  user: 'LAB\\operator'\n  pass: 53616c7465645f5f0123456789abcdef\n"
+      },
+      "sessions": 2,
+      "credentials": 1,
+      "groups": 1,
+      "missing": 0
+    },
+    {
+      "name": "Termius SSH config",
+      "files": {
+        "ssh_config": "Host web\n  HostName node.example.invalid\n  User ops\n  Port 2222\n  IdentityFile ~/.ssh/id_ed25519\n"
+      },
+      "sessions": 1,
+      "credentials": 0,
+      "groups": 1,
+      "missing": 0
+    },
+    {
+      "name": "Termius SSH defaults retain mandatory gateway",
+      "files": {
+        "ssh_config": "Host *\n User ops\n ProxyJump gateway.example.invalid\nHost web\n HostName node.example.invalid\n Port 2222\n"
+      },
+      "sessions": 1,
+      "credentials": 0,
+      "groups": 1,
+      "missing": 0,
+      "first": {
+        "username": "ops",
+        "jump_host": "gateway.example.invalid"
+      }
+    },
+    {
+      "name": "Astra backup retains macros and tunnels",
+      "files": {
+        "backup.json": "{\"version\": 2, \"sessions\": [], \"groups\": [], \"macros\": [{\"id\": \"macro_fixture\", \"name\": \"Read only\", \"text\": \"date\", \"append_newline\": true}], \"tunnels\": [{\"id\": \"tunnel_fixture\", \"name\": \"Test tunnel\", \"type\": \"local\", \"host\": \"node.example.invalid\", \"port\": 22, \"username\": \"ops\", \"bind_host\": \"127.0.0.1\", \"bind_port\": 8080, \"target_host\": \"127.0.0.1\", \"target_port\": 80}]}"
+      },
+      "sessions": 0,
+      "credentials": 0,
+      "groups": 0,
+      "missing": 0,
+      "macros": 1,
+      "tunnels": 1
+    },
+    {
+      "name": "Asbru unported options never bypass a mandatory route",
+      "files": {
+        "asbru.yml": "---\n__PAC__EXPORTED__:\n  children: {g: 1}\ng:\n  _is_group: 1\n  name: Lab\n  parent: __PAC__EXPORTED__\n  children: {a: 1, d: 1}\na:\n  name: SSH exported\n  parent: g\n  method: SSH\n  ip: node.example.invalid\n  port: 2222\n  user: ops\n  pass: TEST_ONLY_asbru\n  options: -J required-gateway.example.invalid\n  expect: []\nd:\n  name: Desktop exported\n  parent: g\n  method: RDP\n  ip: desktop.example.invalid\n  port: 3389\n  user: 'LAB\\operator'\n  pass: 53616c7465645f5f0123456789abcdef\n"
+      },
+      "sessions": 2,
+      "credentials": 1,
+      "groups": 1,
+      "missing": 0,
+      "first": {
+        "import_warning": "Дополнительные параметры Ásbrú требуют ручной настройки; подключение заблокировано до проверки."
+      },
+      "expected_session": "SSH exported"
+    }
+  ],
+  "shared_profile_id": "imp_82604d616c46419c0aaf6a23cd23648b46da00a7"
+}

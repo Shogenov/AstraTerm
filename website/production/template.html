@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090e12">
+  <meta name="description" content="AstraTerm — современный терминал для Windows и Linux. Ваши серверы, ваше пространство, ваш контроль.">
+  <title>AstraTerm — ваш терминал. Ваш контроль.</title>
+  <style>
+    :root {color-scheme:dark;--bg:#090e12;--bg2:#0d151b;--panel:#101a21;--panel-hi:#152229;--stroke:#28363e;--muted:#8a9ca6;--text:#ebf5f0;--mint:#a9f4bc;--mint2:#70d99c;--dark:#082015;--radius:18px}
+    *,*::before,*::after{box-sizing:border-box}
+    html{scroll-behavior:smooth;scroll-padding-top:100px}
+    body{margin:0;background:var(--bg);font-family:Inter,"Segoe UI",ui-sans-serif,system-ui,-apple-system,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased;line-height:1.5;overflow-x:hidden}
+    a{color:inherit;text-decoration:none}
+    button{font:inherit}
+    button,a{-webkit-tap-highlight-color:transparent}
+    button:focus-visible,a:focus-visible{outline:2px solid var(--mint);outline-offset:4px}
+    ::selection{background:#a9f4bc;color:#0a1e14}
+    .container{width:min(1160px,calc(100% - 72px));margin-inline:auto}
+    .topbar{position:sticky;top:0;z-index:100;background:#090e12df;backdrop-filter:blur(16px);border-bottom:1px solid #203038}
+    .nav{display:flex;align-items:center;justify-content:space-between;min-height:76px;gap:18px}
+    .logo{display:inline-flex;align-items:center;gap:11px;font-weight:780;font-size:21px;letter-spacing:-.9px;white-space:nowrap}
+    .logo-mark{height:34px;width:34px;display:grid;place-items:center;background:var(--mint);border-radius:10px;color:#0d2619}
+    .logo-mark svg{height:23px;width:23px}
+    .navlinks{display:flex;align-items:center;gap:32px;color:#a6b6bd;font-size:14px}
+    .navlinks a:hover,.footer a:hover{color:var(--mint)}
+    .nav-download{display:inline-flex;align-items:center;gap:10px;border:1px solid #45624f;color:#dff7e4;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:650;transition:background .2s,border-color .2s}
+    .nav-download:hover{background:#17261e;border-color:var(--mint)}
+    .nav-download svg{width:16px;height:16px}
+    .hero{position:relative;padding:100px 0 88px;isolation:isolate;overflow:hidden}
+    .hero::before{content:"";position:absolute;z-index:-2;inset:0;background:radial-gradient(ellipse 580px 480px at 78% 43%,#1433298a,transparent 75%),radial-gradient(ellipse 480px 380px at -12% 85%,#132b304f,transparent 85%)}
+    .hero::after{content:"";position:absolute;z-index:-1;inset:0;opacity:.25;background-image:linear-gradient(#263c401c 1px,transparent 1px),linear-gradient(90deg,#263c401c 1px,transparent 1px);background-size:49px 49px;mask-image:linear-gradient(90deg,transparent 0%,black 75%,transparent 100%)}
+    .hero-grid{display:grid;grid-template-columns:minmax(0,.96fr) minmax(0,1.04fr);align-items:center;gap:44px}
+    .eyebrow{display:inline-flex;align-items:center;gap:10px;text-transform:uppercase;font-size:11px;letter-spacing:.155em;font-weight:800;color:var(--mint);margin:0 0 25px}
+    .eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--mint);box-shadow:0 0 0 5px #a9f4bc18}
+    h1{font-size:clamp(47px,4.1vw,61px);line-height:1.075;letter-spacing:-.065em;margin:0 0 26px;font-weight:790}
+    h1 span{color:var(--mint)}
+    .hero-description{font-size:17px;line-height:1.75;color:#a9bbc1;max-width:485px;margin:0 0 30px}
+    .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:23px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:11px;border-radius:11px;padding:15px 19px;font-size:14px;font-weight:735;border:1px solid transparent;transition:transform .2s,background .2s,border-color .2s;cursor:pointer}
+    .btn:hover{transform:translateY(-2px)}
+    .btn svg{height:18px;width:18px;flex:0 0 auto}
+    .btn-primary{background:var(--mint);color:#0a2114;box-shadow:0 0 28px #a9f4bc19}
+    .btn-primary:hover{background:#c1ffd0}
+    .btn-outline{background:#122027;color:#dceae7;border-color:#34454d}
+    .btn-outline:hover{background:#1a2c33;border-color:#739583}
+    .support-note{display:flex;align-items:center;gap:9px;font-size:12px;color:#748990}
+    .support-note svg{width:14px;height:14px;color:var(--mint)}
+    .mock-wrap{position:relative;padding:19px 0 20px}
+    .mock-glow{position:absolute;inset:8% -7% 0 5%;background:#69ee9e1b;filter:blur(70px);border-radius:60%;pointer-events:none}
+    .app-window{position:relative;z-index:1;border:1px solid #365348;border-radius:15px;box-shadow:0 25px 75px #000b,0 0 0 1px #e2ffec0b;overflow:hidden;background:#0b1117;transform:perspective(1200px) rotateY(-4deg) rotateX(1.5deg);transform-origin:center center}
+    .window-titlebar{height:39px;padding:0 13px;display:flex;align-items:center;gap:12px;background:#142027;border-bottom:1px solid #304148;font:11px ui-monospace,Consolas,monospace;color:#8ea7af}
+    .window-dots{display:flex;gap:6px}
+    .window-dots i{height:8px;width:8px;border-radius:50%;background:#e57874}
+    .window-dots i:nth-child(2){background:#e8c675}
+    .window-dots i:nth-child(3){background:#77d89c}
+    .window-title{margin:auto;font-weight:650;letter-spacing:.015em}
+    .window-controls{display:flex;gap:10px;opacity:.65}
+    .window-controls span{width:9px;height:1px;background:#8ca4aa;display:inline-block}
+    .app-body{display:grid;grid-template-columns:171px minmax(0,1fr);min-height:370px}
+    .sidebar{background:#0c171d;border-right:1px solid #2b3c44;padding:16px 10px}
+    .sidebar-heading{display:flex;align-items:center;justify-content:space-between;text-transform:uppercase;letter-spacing:.11em;font-size:9px;color:#6f8a93;font-weight:750;margin:3px 5px 13px}
+    .server{display:flex;align-items:center;gap:8px;font-size:10px;color:#9db2b8;padding:9px 9px;border-radius:6px;white-space:nowrap}
+    .server.active{background:#1a352b;color:#c5f4d0}
+    .status-dot{flex-shrink:0;width:6px;height:6px;background:#74d9a0;border-radius:50%}
+    .server:not(.active) .status-dot{background:#647681}
+    .sidebar-group{font-size:9px;letter-spacing:.10em;text-transform:uppercase;margin:21px 6px 4px;color:#65808c;font-weight:750}
+    .term-area{min-width:0}
+    .tabs{height:41px;background:#101b22;border-bottom:1px solid #2a3d43;display:flex;align-items:stretch;gap:1px;padding-left:7px;overflow:hidden}
+    .tab{font-size:10px;display:flex;align-items:center;gap:8px;padding:0 13px;color:#79929e;white-space:nowrap}
+    .tab.active{color:#b5f6c6;border-bottom:2px solid var(--mint);background:#19262b}
+    .tab .close{opacity:.55}
+    .term-text{font:11px/1.95 "Cascadia Code","JetBrains Mono",Consolas,monospace;padding:25px 23px 32px;color:#a9bbc0;white-space:pre;overflow:hidden}
+    .term-text .prompt,.term-text .good{color:#93eeb4}
+    .term-text .blue{color:#84bfd9}
+    .term-text .dim{color:#68818b}
+    .cursor{height:14px;width:7px;background:#9de5b5;display:inline-block;vertical-align:-2px;animation:blink 1.2s step-end infinite}
+    @keyframes blink{50%{opacity:0}}
+    .app-status{height:26px;background:#19372b;border-top:1px solid #42654d;display:flex;justify-content:space-between;align-items:center;font:9px ui-monospace,Consolas,monospace;padding:0 13px;color:#a4f3bf}
+    .app-status span{display:flex;align-items:center;gap:6px}
+    .hero-caption{position:absolute;right:7%;bottom:0;z-index:2;border:1px solid #385547;background:#12251d;padding:9px 14px;border-radius:8px;color:#c5f9d1;font:11px ui-monospace,Consolas,monospace;box-shadow:0 8px 25px #0008}
+    .hero-caption::before{content:"●";color:#7df3a4;margin-right:8px}
+    .trust-strip{border-block:1px solid #1c2b30;background:#0c1318}
+    .trust-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:23px 0;color:#7e949d;font-size:12px;font-weight:650;letter-spacing:.005em;flex-wrap:wrap}
+    .trust-row div{display:flex;align-items:center;gap:11px}
+    .trust-row svg{width:17px;height:17px;color:#90dca8}
+    .section{padding:108px 0}
+    .section-kicker{font-size:11px;letter-spacing:.145em;text-transform:uppercase;font-weight:800;color:var(--mint);margin:0 0 13px}
+    .section-heading{font-size:clamp(35px,4.2vw,52px);letter-spacing:-.05em;line-height:1.13;margin:0 0 18px;font-weight:770}
+    .section-desc{color:var(--muted);max-width:620px;margin:0;font-size:16px;line-height:1.7}
+    .features-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:42px}
+    .feature{padding:24px 20px 27px;background:linear-gradient(145deg,#111d23,#0d171c);border:1px solid #2a3c42;border-radius:14px;min-height:208px;transition:border-color .25s,transform .25s}
+    .feature:hover{border-color:#557b62;transform:translateY(-4px)}
+    .feature-icon{width:41px;height:41px;display:grid;place-items:center;border-radius:11px;background:#20382c;color:var(--mint);margin-bottom:21px}
+    .feature-icon svg{height:22px;width:22px}
+    .feature h3{font-size:16px;letter-spacing:-.025em;margin:0 0 9px;font-weight:740}
+    .feature p{font-size:13px;color:#91a5ad;line-height:1.65;margin:0}
+    .workflow{background:#0d151a;border-top:1px solid #18292e;border-bottom:1px solid #18292e}
+    .workflow-grid{display:grid;grid-template-columns:.85fr 1.15fr;gap:65px;align-items:center}
+    .workflow-list{display:flex;flex-direction:column;gap:22px;margin-top:33px}
+    .workflow-step{display:flex;gap:14px;align-items:flex-start}
+    .step-no{border:1px solid #39584a;color:var(--mint);width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:0 0 auto;font:11px ui-monospace,Consolas,monospace}
+    .workflow-step strong{font-size:14px;display:block;margin-bottom:4px}
+    .workflow-step small{font-size:12px;color:#8ea2ab;line-height:1.6;display:block}
+    .big-terminal{border:1px solid #2d4540;background:#080f14;border-radius:13px;overflow:hidden;box-shadow:0 20px 40px #0004}
+    .big-terminal .window-titlebar{height:41px}
+    .big-terminal pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:24px 25px 29px;line-height:1.9;font:12px/1.9 "Cascadia Code",Consolas,monospace;color:#a4b9bb}
+    .big-terminal .mint{color:#9df0b9}
+    .big-terminal .blue{color:#91cddd}
+    .big-terminal .dim{color:#718991}
+    .download-section{padding:110px 0 114px}
+    .download-header{text-align:center;max-width:600px;margin:0 auto 40px}
+    .download-header .section-desc{margin:0 auto}
+    .platforms{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:900px;margin:0 auto}
+    .platform{padding:28px;background:#101b21;border:1px solid #2c4145;border-radius:17px;position:relative;transition:border-color .2s}
+    .platform.recommended{border-color:#7bc595;box-shadow:0 0 0 1px #95ecab20}
+    .os-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+    .os-icon{height:51px;width:51px;border-radius:13px;background:#1d342b;color:var(--mint);display:grid;place-items:center}
+    .os-icon svg{width:29px;height:29px}
+    .recommended-label{color:#9fe9b5;font:10px ui-monospace,Consolas,monospace}
+    .platform h3{font-size:24px;letter-spacing:-.04em;margin:21px 0 5px}
+    .platform p{color:#93aab1;font-size:13px;margin:0 0 24px;line-height:1.65;min-height:44px}
+    .download-button{display:flex;align-items:center;justify-content:center;gap:10px;border:0;background:var(--mint);color:#0a2015;font-size:14px;font-weight:740;padding:14px 17px;border-radius:10px;width:100%;cursor:pointer;transition:background .2s}
+    .download-button:hover{background:#c1ffd1}
+    .download-button svg{width:18px;height:18px}
+    .release-info{text-align:center;color:#7d949c;font-size:12px;margin-top:23px}
+    .release-info strong{color:#bbcec7;font-weight:600}
+    .footer{border-top:1px solid #26363c;padding:34px 0 46px;color:#7d929a}
+    .footer-row{display:flex;justify-content:space-between;gap:20px;align-items:center;flex-wrap:wrap}
+    .footer .logo{font-size:16px;color:#dbece5}
+    .footer .logo-mark{width:27px;height:27px;border-radius:8px}
+    .footer .logo-mark svg{width:17px;height:17px}
+    .footer small{font-size:12px}
+    .footer-links{display:flex;gap:22px;font-size:12px}
+    #notice{position:fixed;z-index:200;right:22px;bottom:22px;max-width:min(440px,calc(100vw - 44px));background:#1b3125;color:#d2f8da;border:1px solid #6cae7c;border-radius:12px;padding:14px 18px;box-shadow:0 10px 35px #0009;font-size:13px;line-height:1.5;opacity:0;transform:translateY(16px);pointer-events:none;transition:opacity .2s,transform .2s}
+    #notice.show{opacity:1;transform:translateY(0)}
+    @media(max-width:1100px){.hero-grid{gap:24px;grid-template-columns:1fr 1.1fr}.app-body{grid-template-columns:138px 1fr}.sidebar{padding-inline:6px}.server{padding-inline:5px}.term-text{padding:21px 13px;font-size:10px}.features-grid{grid-template-columns:repeat(2,1fr)}.workflow-grid{gap:35px}}
+    @media(max-width:760px){.container{width:min(100% - 36px,600px)}.nav{min-height:69px}.navlinks{display:none}.nav-download{padding:10px 13px}.nav-download .nav-label{display:none}.hero{padding:62px 0 70px}.hero-grid,.workflow-grid{grid-template-columns:1fr}.hero-grid{gap:35px}.hero-description{font-size:16px}.mock-wrap{max-width:600px;margin:auto;width:100%}.app-window{transform:none}.section{padding:76px 0}.workflow-grid{gap:36px}.download-section{padding:80px 0}.platforms{grid-template-columns:1fr;max-width:500px}.platform p{min-height:0}.trust-row{gap:17px}.trust-row div{width:calc(50% - 12px)}.footer-row{align-items:flex-start}.footer-links{width:100%}}
+    @media(max-width:430px){h1{font-size:clamp(43px,12vw,56px)}.hero-actions{display:grid;grid-template-columns:1fr 1fr}.hero-actions .btn{padding:12px 9px;gap:5px;font-size:12px}.app-body{grid-template-columns:104px 1fr;min-height:320px}.sidebar{padding-top:12px}.server{font-size:8px;gap:5px}.sidebar-heading{font-size:7px}.term-text{font-size:8px;padding:17px 10px;line-height:2}.tab{font-size:8px;padding:0 7px}.features-grid{grid-template-columns:1fr}.feature{min-height:0}.trust-row div{font-size:10px}.hero-caption{font-size:9px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+    <symbol id="i-logo" viewBox="0 0 24 24"><path d="M12 3 2.8 20h4.1l2-3.8h6.2L17.1 20h4.1L12 3Zm0 7.1 2.1 4.1H9.9L12 10.1Z" fill="currentColor"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 6 6 6-6 6m9 0h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3 9h18M10 9v11" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 6 3.5 9 8 11 4.5-2 8-5 8-11V5l-8-3Z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-windows" viewBox="0 0 24 24"><path fill="currentColor" d="M2 4.4 10.7 3v8.3H2V4.4ZM12.3 2.7 22 1v10.3h-9.7V2.7ZM2 12.7h8.7V21L2 19.6v-6.9Zm10.3 0H22V23l-9.7-1.6v-8.7Z"/></symbol>
+    <symbol id="i-linux" viewBox="0 0 24 24"><path d="M8.2 8C8 5.4 9.4 2.5 12 2.5S16 5.4 15.8 8c-.2 1.6 1.2 3.2 1.7 5 .7 2.5 1.1 4.2-.1 5.1-1.2.8-2.5-.1-3.4-.2-.7.7-1.3 1-2 1s-1.3-.3-2-1c-.9.1-2.2 1-3.4.2-1.2-.9-.8-2.6-.1-5.1.5-1.8 1.9-3.4 1.7-5Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.3 9.4h.2m3-.1h.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m11 12 1 1 1-1" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></symbol>
+  </svg>
+  <header class="topbar">
+    <nav class="container nav" aria-label="Основная навигация">
+      <a class="logo" href="#top" aria-label="AstraTerm — главная"><span class="logo-mark"><svg><use href="#i-logo"/></svg></span>AstraTerm</a>
+      <div class="navlinks"><a href="#features">Возможности</a><a href="#workflow">Как это работает</a><a href="#download">Скачать</a></div>
+      <a class="nav-download" href="#download"><svg><use href="#i-download"/></svg><span class="nav-label">Скачать AstraTerm</span></a>
+    </nav>
+  </header>
+  <main id="top">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <p class="eyebrow">Терминал для инженеров</p>
+          <h1>Ваши серверы.<br>Ваш терминал.<br><span>Ваш контроль.</span></h1>
+          <p class="hero-description">AstraTerm — единое рабочее пространство для командной строки и удалённых подключений. Создан для тех, кто работает с инфраструктурой каждый день.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#download-windows"><svg><use href="#i-windows"/></svg>Для Windows</a>
+            <a class="btn btn-outline" href="#download-linux"><svg><use href="#i-linux"/></svg>Для Linux</a>
+          </div>
+          <div class="support-note"><svg><use href="#i-check"/></svg>Один инструмент. Две платформы.</div>
+        </div>
+        <div class="mock-wrap" aria-label="Концептуальный макет интерфейса AstraTerm">
+          <div class="mock-glow"></div>
+          <div class="app-window">
+            <div class="window-titlebar"><div class="window-dots"><i></i><i></i><i></i></div><span class="window-title">AstraTerm — Workspace</span><div class="window-controls"><span></span><span></span></div></div>
+            <div class="app-body">
+              <aside class="sidebar"><div class="sidebar-heading">Connections <span>+</span></div>
+                <div class="server active"><i class="status-dot"></i>prod-server</div>
+                <div class="server"><i class="status-dot"></i>staging</div>
+                <div class="server"><i class="status-dot"></i>dev-node-01</div>
+                <div class="sidebar-group">Local</div><div class="server"><svg style="width:13px;height:13px"><use href="#i-terminal"/></svg>Terminal</div>
+              </aside>
+              <div class="term-area"><div class="tabs"><div class="tab active">⌁ &nbsp;prod-server <span class="close">×</span></div><div class="tab">⌁ &nbsp;staging</div></div>
+                <div class="term-text"><span class="dim"># AstraTerm · remote shell</span>
+<span class="prompt">➜</span> ~ ssh admin@prod-server
+<span class="blue">Connecting to prod-server...</span>
+<span class="good">✓ Connection established</span>
+
+<span class="prompt">admin@prod</span>:~$ uptime
+<span class="dim">up 42 days, 03:21, 2 users</span>
+<span class="prompt">admin@prod</span>:~$ ls
+<span class="blue">apps</span>   <span class="blue">backups</span>   <span class="blue">logs</span>
+<span class="prompt">admin@prod</span>:~$ <span class="cursor"></span></div>
+              </div>
+            </div>
+            <div class="app-status"><span>● SSH CONNECTED</span><span>UTF-8 &nbsp; | &nbsp; bash</span></div>
+          </div>
+          <div class="hero-caption">SESSION ACTIVE</div>
+        </div>
+      </div>
+    </section>
+    <div class="trust-strip"><div class="container trust-row"><div><svg><use href="#i-terminal"/></svg>Удобная командная строка</div><div><svg><use href="#i-layout"/></svg>Единое рабочее пространство</div><div><svg><use href="#i-layers"/></svg>Windows &amp; Linux</div><div><svg><use href="#i-shield"/></svg>Для повседневных задач</div></div></div>
+    <section class="section" id="features"><div class="container">
+      <p class="section-kicker">Возможности</p><h2 class="section-heading">Всё нужное —<br>в одном окне.</h2><p class="section-desc">Больше фокуса на задачах, меньше переключений между инструментами. Пространство, в котором удобно работать с серверами.</p>
+      <div class="features-grid">
+        <article class="feature"><div class="feature-icon"><svg><use href="#i-terminal"/></svg></div><h3>Удалённые сессии</h3><p>Подключайтесь к серверам и работайте через привычную командную строку.</p></article>
+        <article class="feature"><div class="feature-icon"><svg><use href="#i-layout"/></svg></div><h3>Удобные вкладки</h3><p>Держите несколько рабочих контекстов перед глазами, не теряя фокус.</p></article>
+        <article class="feature"><div class="feature-icon"><svg><use href="#i-layers"/></svg></div><h3>Ваши подключения</h3><p>Организуйте рабочее пространство под свою инфраструктуру.</p></article>
+        <article class="feature"><div class="feature-icon"><svg><use href="#i-shield"/></svg></div><h3>Для Windows и Linux</h3><p>Единый подход к работе независимо от основной операционной системы.</p></article>
+      </div>
+    </div></section>
+    <section class="section workflow" id="workflow"><div class="container workflow-grid">
+      <div><p class="section-kicker">Ваш рабочий процесс</p><h2 class="section-heading">Меньше рутины.<br>Больше контроля.</h2><p class="section-desc">AstraTerm помогает сосредоточиться на инфраструктуре и командах, а не на поиске нужного окна.</p>
+        <div class="workflow-list"><div class="workflow-step"><span class="step-no">01</span><div><strong>Откройте AstraTerm</strong><small>Начните работу в привычном интерфейсе.</small></div></div><div class="workflow-step"><span class="step-no">02</span><div><strong>Выберите подключение</strong><small>Переходите к нужному окружению.</small></div></div><div class="workflow-step"><span class="step-no">03</span><div><strong>Работайте без отвлечений</strong><small>Команды и сессии всегда рядом.</small></div></div></div>
+      </div>
+      <div class="big-terminal" aria-label="Демонстрация командной строки"><div class="window-titlebar"><div class="window-dots"><i></i><i></i><i></i></div><span class="window-title">~/infrastructure — bash</span></div><pre><span class="dim"># Your infrastructure, one command away.</span>
+
+<span class="mint">$</span> ssh ops@staging
+<span class="mint">✓</span> Authenticated using public key
+
+<span class="mint">ops@staging:~$</span> docker ps
+<span class="blue">CONTAINER ID   IMAGE        STATUS</span>
+a8b4c2d1       api:latest   Up 7 days
+b2d9e9a3       nginx:main   Up 7 days
+
+<span class="mint">ops@staging:~$</span> <span class="cursor"></span></pre></div>
+    </div></section>
+    <section class="download-section" id="download"><div class="container"><div class="download-header"><p class="section-kicker">Начните работу</p><h2 class="section-heading">AstraTerm для вашей ОС.</h2><p class="section-desc">Выберите платформу и установите терминал. Ссылки на релизы появятся здесь после их настройки.</p></div>
+      <div class="platforms"><article class="platform" id="download-windows" data-platform="windows"><div class="os-head"><div class="os-icon"><svg><use href="#i-windows"/></svg></div><span class="recommended-label" data-rec="windows"></span></div><h3>Windows</h3><p>Версия AstraTerm для рабочих станций на Windows.</p><button class="download-button" data-download="windows" type="button"><svg><use href="#i-download"/></svg>Скачать для Windows</button></article>
+        <article class="platform" id="download-linux" data-platform="linux"><div class="os-head"><div class="os-icon"><svg><use href="#i-linux"/></svg></div><span class="recommended-label" data-rec="linux"></span></div><h3>Linux</h3><p>Версия AstraTerm для Linux-дистрибутивов.</p><button class="download-button" data-download="linux" type="button"><svg><use href="#i-download"/></svg>Скачать для Linux</button></article></div>
+      <p class="release-info">Информация о версии, форматах пакетов и контрольных суммах будет доступна после публикации релизов.</p>
+    </div></section>
+  </main>
+  <footer class="footer"><div class="container footer-row"><a class="logo" href="#top"><span class="logo-mark"><svg><use href="#i-logo"/></svg></span>AstraTerm</a><small>© <span id="year">2026</span> AstraTerm. Терминал для Windows и Linux.</small><div class="footer-links"><a href="#features">Возможности</a><a href="#download">Скачать</a><a href="#top">Наверх ↑</a></div></div></footer>
+  <div id="notice" role="status" aria-live="polite"></div>
+  <script>
+    // Замените пустые значения реальными HTTPS-ссылками на опубликованные установщики.
+    // Например: windows: 'https://example.com/releases/AstraTerm-Setup.exe'
+    const DOWNLOAD_URLS = { windows: '', linux: '' };
+    const notice = document.getElementById('notice');
+    let noticeTimeout;
+    function showNotice(message) {
+      notice.textContent = message;
+      notice.classList.add('show');
+      clearTimeout(noticeTimeout);
+      noticeTimeout = setTimeout(() => notice.classList.remove('show'), 5500);
+    }
+    document.querySelectorAll('[data-download]').forEach(button => {
+      button.addEventListener('click', () => {
+        const platform = button.dataset.download;
+        const url = DOWNLOAD_URLS[platform];
+        if (!url) {
+          showNotice('Ссылка на установщик пока не настроена. Добавьте адрес релиза в DOWNLOAD_URLS внутри HTML-файла.');
+          return;
+        }
+        try {
+          const parsed = new URL(url, window.location.href);
+          if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('Unsupported URL scheme');
+          window.location.href = parsed.href;
+        } catch (_) { showNotice('Проверьте ссылку на установщик: нужен корректный HTTP(S)-адрес.'); }
+      });
+    });
+    const agent = navigator.userAgent.toLowerCase();
+    const platform = agent.includes('windows') ? 'windows' : agent.includes('linux') && !agent.includes('android') ? 'linux' : null;
+    if (platform) {
+      document.querySelector(`[data-platform="${platform}"]`)?.classList.add('recommended');
+      document.querySelector(`[data-rec="${platform}"]`).textContent = 'РЕКОМЕНДУЕТСЯ ДЛЯ ВАС';
+    }
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

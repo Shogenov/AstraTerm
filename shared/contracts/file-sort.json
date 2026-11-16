@@ -1,0 +1,15 @@
+{
+  "entries": [
+    {"name":"Folder","isDirectory":true,"size":4096},
+    {"name":"file10","isDirectory":false,"size":20,"mtime":100,"permissions":"rwxr-x---"},
+    {"name":"file2","isDirectory":false,"size":3,"mtime":200,"created":50,"permissions":"rw-r-----"},
+    {"name":"file1","isDirectory":false,"size":100,"mtime":300,"created":90,"permissions":"r--------"}
+  ],
+  "cases": [
+    ["name",false,["Folder","file1","file2","file10"]],
+    ["name",true,["Folder","file10","file2","file1"]],
+    ["size",false,["Folder","file2","file10","file1"]],
+    ["mtime",true,["Folder","file1","file2","file10"]],
+    ["created",true,["Folder","file1","file2","file10"]]
+  ]
+}

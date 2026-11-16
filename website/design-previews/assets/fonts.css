@@ -1,0 +1,56 @@
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(font-b0c618f6d8ea99.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(font-1a6844598cfc2d.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(font-a0c8dd62392c1b.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(font-0c5880fa6a928e.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(font-8a7de2e05baaa8.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(font-5e248c5227a0ef.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url(font-7e6392e9fcf285.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Prata';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(font-62fea8924bbcd7.ttf) format('truetype');
+}

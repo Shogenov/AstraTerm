@@ -1,0 +1,18 @@
+/* Retain the supplied visual design; replace drawn terminals with real captures. */
+.real-preview{margin:0;min-width:0}
+.real-window{display:block;cursor:zoom-in}
+.real-window img,.linux-preview img{display:block;width:100%;height:auto;background:#101619}
+.real-preview figcaption,.linux-preview figcaption{margin-top:16px;color:#8a9ca6;font-size:10px;line-height:1.7}
+.real-preview figcaption{display:flex;gap:14px;justify-content:space-between;align-items:baseline}
+.real-preview figcaption a{color:var(--mint);white-space:nowrap}
+.screenshot-switch{display:flex;gap:8px;margin-bottom:15px}
+.screenshot-switch button{border:1px solid #2a3c42;border-radius:8px;padding:8px 12px;background:#111b20;color:#8a9ca6;font-size:11px;cursor:pointer}
+.screenshot-switch button[aria-pressed=true]{border-color:#6cab7c;background:#20382c;color:var(--mint)}
+.linux-preview{margin:0;min-width:0}
+.linux-preview>a{display:block;border:1px solid #2d4540;border-radius:13px;overflow:hidden;box-shadow:0 20px 40px #0004;cursor:zoom-in}
+.release-info{display:flex;flex-direction:column;gap:9px;overflow-wrap:anywhere;max-width:900px;margin:25px auto 0;text-align:left;font-size:11px}
+.release-info code{font:10px ui-monospace,Consolas,monospace;color:#90a89e;word-break:break-all}
+.release-info>a{color:var(--mint);margin-top:7px}
+.footer-links{flex-wrap:wrap}
+@media(min-width:1000px){.hero-grid{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:30px}.real-window{width:calc(100% + 80px);max-width:none}.real-preview figcaption{width:calc(100% + 50px)}}
+@media(max-width:430px){.real-preview figcaption{display:block}.real-preview figcaption a{display:block;margin-top:4px}}

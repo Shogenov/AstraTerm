@@ -1,0 +1,16 @@
+{
+  "files": {
+    "/proc/stat": "cpu 100 20 30 400 50 6 7 8 900 99\ncpu0 1 2 3 4\n",
+    "/proc/meminfo": "MemTotal: 8192 kB\nMemAvailable: 2048 kB\nMemFree: 1000 kB\nBuffers: 200 kB\nCached: 300 kB\nSReclaimable: 100 kB\nShmem: 50 kB\n",
+    "/proc/uptime": "90061.25 30000\n",
+    "/proc/sys/kernel/hostname": "fixture-host\n",
+    "/proc/net/route": "Iface Destination Gateway Flags\neth0 00000000 0100007F 0003\n",
+    "/proc/net/dev": "lo: 9999 0 0 0 0 0 0 0 9999 0 0 0 0 0 0 0\neth0: 1024 1 0 0 0 0 0 0 2048 1 0 0 0 0 0 0\nveth1: 999 1 0 0 0 0 0 0 888 1 0 0 0 0 0 0\n",
+    "/proc/mounts": "/dev/sda1 / ext4 rw 0 0\nproc /proc proc rw 0 0\ntmpfs /run tmpfs rw 0 0\n/dev/sdb1 /data\\040disk ext4 rw 0 0\nserver:/exports /mnt/nfs nfs4 rw 0 0\n/dev/sdb1 /data\\040disk ext4 rw 0 0\n"
+  },
+  "statvfs": {"bsize":4096,"frsize":1024,"blocks":1000,"bfree":400,"bavail":300},
+  "utmp_users": ["tester","ashogenov","tester","vlad"],
+  "expected": {"hostname":"fixture-host","cpu_total":621,"cpu_idle":450,"memory_total":8388608,"memory_used":6291456,"uptime":90061.25,"rx":1024,"tx":2048,"interfaces":["eth0"],"users":[{"name":"ashogenov","count":1},{"name":"tester","count":2},{"name":"vlad","count":1}]},
+  "mounts": ["/","/data disk","/mnt/nfs"],
+  "fallback_memory_used":6801408
+}

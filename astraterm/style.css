@@ -1,0 +1,108 @@
+/* Graphite workspace. Space and surface contrast define the hierarchy. */
+@define-color bg_color #171b20;
+@define-color fg_color #d9e1e8;
+@define-color theme_bg_color #171b20;
+@define-color theme_fg_color #d9e1e8;
+@define-color theme_base_color #14181d;
+@define-color theme_text_color #d9e1e8;
+@define-color theme_selected_bg_color #253a35;
+@define-color theme_selected_fg_color #b5efdb;
+@define-color borders #2a3138;
+window, dialog { background-color: #171b20; color: #d9e1e8; }
+headerbar { background-image: none; background-color: #171b20; border: 0; box-shadow: none; padding: 0 8px 0 0; min-height: 52px; }
+headerbar .titlebutton { background: transparent; border: 0; min-width: 22px; min-height: 22px; padding: 4px; margin: 0 2px; color: #85919d; }
+headerbar .titlebutton:hover { background: #292f36; color: #e8edf2; }
+headerbar .titlebutton.close:hover { background: #66353e; color: #ffffff; }
+button { background-image: none; background-color: transparent; color: #aab6c1; border: 1px solid transparent; border-radius: 6px; padding: 5px 10px; min-height: 22px; box-shadow: none; text-shadow: none; }
+button:hover { background-color: #272e35; color: #edf2f6; }
+button:active { background-color: #303941; }
+button:checked { background-color: #273c35; color: #a2e7cc; }
+button:disabled { color: #505d67; background-color: transparent; }
+button:focus { outline: 1px solid #76bea6; outline-offset: -3px; }
+button.primary, button.suggested-action { background: #82d9bd; color: #102b23; border-color: transparent; font-weight: bold; padding-left: 13px; padding-right: 13px; }
+button.primary:hover, button.suggested-action:hover { background: #a3e6cf; }
+button.primary:active { background: #68bda2; }
+button.flat { border-color: transparent; background-color: transparent; }
+button.flat:hover { background-color: #272e35; }
+button.icon-button, button.pane-close { min-width: 22px; min-height: 22px; padding: 4px; }
+button.pane-close { min-width: 16px; min-height: 16px; padding: 2px; }
+button.icon-button:checked, button.icon-button.panel-visible { background: #273c35; }
+button.destructive-action:hover { color: #ee9da7; background: #3c282f; }
+button.multiexec-toggle { color: #9ca9b4; padding-left: 11px; padding-right: 11px; }
+button.multiexec-toggle:checked { background: #2d5446; color: #c0f5df; }
+entry { background: #20262d; color: #d9e1e8; caret-color: #82d9bd; border: 1px solid transparent; border-radius: 6px; padding: 5px 9px; min-height: 22px; box-shadow: none; }
+entry:focus { background: #232c31; border-color: #5e9c88; }
+entry image { color: #7b8995; }
+entry selection, textview text selection { background: #36594c; color: #edf7f2; }
+.quick-connect { background: #20262c; font-size: 12px; }
+.app-toolbar { background: #171b20; padding: 8px 8px 8px 14px; }
+.brand { color: #edf2f6; font-weight: bold; font-size: 16px; }
+.brand-mark { color: #82d9bd; font-family: monospace; font-size: 22px; font-weight: bold; padding-right: 2px; }
+.section-title { color: #c5ced6; font-size: 12px; font-weight: bold; }
+.muted, .dim-label { color: #7f8b96; font-size: 11px; }
+.eyebrow { color: #8f9ca8; font-size: 11px; font-weight: bold; }
+.count-badge { color: #85919d; background: #242b32; border-radius: 7px; padding: 1px 5px; font-size: 10px; }
+menu, popover { background: #22282f; color: #d9e1e8; border: 1px solid #343d46; padding: 5px; border-radius: 7px; }
+menuitem { padding: 7px 11px; border-radius: 4px; }
+menuitem:hover { background: #30423b; color: #d5f5e7; }
+menu separator { background: #343d46; margin: 5px; min-height: 1px; }
+tooltip { background: #2a323a; color: #e2e9ef; border: 1px solid #3a454f; border-radius: 5px; }
+.sidebar, .files-panel { background: #171b20; }
+treeview, list { background: #171b20; color: #bac5cf; }
+treeview.view { -GtkTreeView-expander-size: 11; outline-color: #618877; }
+treeview.view:selected, row:selected { background: #253a35; color: #c4f0df; }
+treeview.view:hover { background: #1e262c; }
+treeview.view header button { background: #171b20; border: 0; color: #7f8b96; font-size: 11px; padding: 4px 6px; }
+.session-list { font-size: 12px; }
+.files-list { font-size: 12px; }
+scrolledwindow, viewport { border: 0; box-shadow: none; }
+notebook { background: #171b20; border: 0; }
+notebook > header { background: #171b20; border: 0; padding: 3px 6px 0; box-shadow: none; }
+notebook > header tab { background: transparent; color: #7f8b96; padding: 4px 8px; margin: 0 3px 0 0; border: 0; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; }
+.workspace-tab-bar { background: #171b20; padding: 3px 6px 0; }
+.workspace-tab { background: #171b20; color: #7f8b96; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; }
+.workspace-tab:hover { background: #20262d; color: #c9d3dc; }
+.workspace-tab.active-tab { background: #101316; color: #e0e8ed; border-bottom-color: #82d9bd; }
+notebook > header tab:hover { background: #20262d; color: #c9d3dc; }
+.tab-drop-target, .workspace-tab.tab-drop-target { background: #294238; box-shadow: inset 0 0 0 1px #82d9bd; }
+notebook > header tab:checked { background: #101316; color: #e0e8ed; border-bottom-color: #82d9bd; }
+.workspace-tab button.tab-close { min-width: 17px; min-height: 17px; padding: 1px; }
+.cancel-drop { padding: 1px 6px; border: 1px dashed #343d46; border-radius: 4px; color: #8e9ca8; }
+.cancel-drop.tab-drop-target { color: #cde9dc; }
+.toast { padding: 6px 10px; border: 1px solid #3b4b43; border-radius: 8px; background: #25342d; color: #cde9dc; }
+.workspace-tabs > stack { background: #101316; }
+.terminal-pane, .terminal-body, .terminal-surface, .tiled-terminals { background: #101316; }
+.terminal-body { padding: 7px 0 7px 10px; }
+.terminal-heading { background: #151a1e; padding: 0 3px; font-size: 11px; }
+.terminal-title { color: #8e9ca8; }
+.terminal-state { color: #5f6f79; font-size: 9px; }
+.terminal-focus-marker { color: transparent; font-size: 7px; }
+.active-pane .terminal-focus-marker { color: #82d9bd; }
+.active-pane .terminal-title { color: #d0dfdf; }
+.multiexec-selected .terminal-heading { background: #192720; }
+.multiexec-target { background: transparent; color: #78968a; padding: 0; font-size: 10px; }
+.multiexec-target:checked { color: #a7e8cc; }
+.multiexec-bar { background: #1d2529; color: #8b9da4; padding: 4px 12px 4px 16px; font-size: 11px; }
+.multiexec-bar button { padding: 2px 9px; min-height: 22px; font-size: 11px; }
+.multiexec-bar.broadcast-active { background: #1e3028; color: #b4ead2; }
+.files-header { padding: 0 0 2px; }
+.files-modes { background: #20262c; border-radius: 6px; padding: 2px; }
+.files-modes button.mode-button { border: 0; min-height: 20px; padding: 3px 7px; font-size: 10px; border-radius: 4px; }
+.files-modes button.active { background: #343f46; color: #e1e8ed; }
+.files-navigation button.icon-button, .files-toolbar button.icon-button { padding: 3px; min-height: 22px; min-width: 22px; }
+entry.files-path { background: #1e242a; padding: 4px 6px; min-height: 22px; font-size: 11px; }
+.files-toolbar { padding: 0 0 1px; }
+.files-status { font-size: 10px; color: #697984; }
+.statusbar { background: #171b20; color: #6e7e89; padding: 3px 8px; font-size: 10px; }
+.statusbar .muted { font-size: 10px; }
+.host-stats { color: #c7d4de; font-size: 10px; }
+paned > separator { background: #242b31; min-width: 1px; min-height: 1px; border: 0; }
+paned > separator:hover { background: #5b8c79; }
+scrollbar { background: transparent; border: 0; }
+scrollbar slider { background: #34414a; border: 0; border-radius: 5px; min-width: 5px; min-height: 24px; margin: 2px; }
+scrollbar slider:hover { background: #50636c; }
+textview, textview text { background: #14181d; color: #d9e1e8; }
+checkbutton, radiobutton { color: #b9c5ce; }
+checkbutton check, radiobutton radio { background: #20282e; border: 1px solid #4e5d66; border-radius: 3px; min-width: 13px; min-height: 13px; }
+checkbutton check:checked, radiobutton radio:checked { background: #72bca0; border-color: #72bca0; color: #102c23; }
+checkbutton:focus { outline: 1px solid #76bea6; outline-offset: 2px; }

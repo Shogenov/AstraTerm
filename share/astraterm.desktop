@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AstraTerm
+GenericName=Terminal and connection manager
+GenericName[ru]=Терминал и менеджер подключений
+Comment=SSH, SFTP, terminal tabs and SSH tunnels
+Comment[ru]=SSH, SFTP, вкладки терминалов и SSH-туннели
+Exec=astraterm
+Icon=astraterm
+Terminal=false
+Categories=System;TerminalEmulator;Network;
+StartupNotify=true
+StartupWMClass=AstraTerm

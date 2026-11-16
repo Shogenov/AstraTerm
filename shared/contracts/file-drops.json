@@ -1,0 +1,10 @@
+{
+  "files": ["Перетаскивание A.txt", "drop-B.txt", "drop-C.txt"],
+  "directories": ["drop-a", "drop-b"],
+  "maximum_files": 100,
+  "destination": "receiving-session-sftp-directory",
+  "shell_input": false,
+  "recursive_directories": false,
+  "overwrite": "confirm-each-existing-file",
+  "reconnect": "cancel-original-binding"
+}

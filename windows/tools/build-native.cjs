@@ -1,0 +1,12 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+if (process.platform !== 'win32') throw new Error('Build the RDP surface on Windows.');
+const root = path.join(__dirname, '..');
+const compiler = path.join(process.env.SystemRoot || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
+const output = path.join(root, 'native', 'AstraTerm.RdpHost.exe');
+const sources=fs.readdirSync(path.join(root,'native')).filter(name=>name.endsWith('.cs')).sort().map(name=>path.join(root,'native',name));
+const result = spawnSync(compiler, ['/nologo', '/target:exe', '/platform:x64', '/optimize+', '/r:System.Windows.Forms.dll', '/r:System.Drawing.dll', '/r:System.Web.Extensions.dll', '/r:Microsoft.CSharp.dll', '/out:' + output, ...sources], {encoding:'utf8',windowsHide:true});
+if (result.status !== 0 || !fs.existsSync(output)) throw new Error(result.stdout || result.stderr || 'RDP helper build failed.');
+process.stdout.write('Native RDP surface built.\n');

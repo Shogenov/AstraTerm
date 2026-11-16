@@ -1,0 +1,15 @@
+{
+  "cases": [
+    {"name":"disabled-by-default","selected":["a","b"],"source":"a","expected":["a"]},
+    {"name":"checked-human-source","enabled":true,"selected":["a","b"],"source":"a","expected":["a","b"]},
+    {"name":"unchecked-source","enabled":true,"selected":["a","b"],"source":"c","expected":["c"]},
+    {"name":"macro-is-local","enabled":true,"selected":["a","b"],"source":"a","human":false,"expected":["a"]},
+    {"name":"reply-is-local","enabled":true,"selected":["a","b"],"source":"a","human":false,"data":"\u001b[1;1R","expected":["a"]},
+    {"name":"reconnect-clears-recipient","enabled":true,"selected":["a","b"],"reconnect":"b","source":"a","expected":["a"]},
+    {"name":"reconnect-clears-source","enabled":true,"selected":["a","b"],"reconnect":"a","source":"a","expected":["a"]},
+    {"name":"exit-clears-recipient","enabled":true,"selected":["a","b"],"exit":"b","source":"a","expected":["a"]},
+    {"name":"select-all-running-only","enabled":true,"exit":"c","select_all":true,"source":"a","expected":["a","b"]},
+    {"name":"clear-all","enabled":true,"selected":["a","b"],"clear":true,"source":"a","expected":["a"]},
+    {"name":"unicode-and-controls","enabled":true,"selected":["a","b"],"source":"a","data":"Привет 🌍\u0000\u001b[A\r","expected":["a","b"]}
+  ]
+}
