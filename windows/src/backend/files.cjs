@@ -7,6 +7,7 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { TextDecoder } = require('node:util');
 const { permissions, remoteBirthTimes } = require('./file-metadata.cjs');
+const { directoryReport, resolveTerminalDirectory, REMOTE_HOSTNAME, UNKNOWN_DIRECTORY } = require('./terminal-directory.cjs');
 
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const token = () => crypto.randomBytes(12).toString('hex');
@@ -136,9 +137,36 @@ class FilesService {
     try { return binding.mode === 'local' ? await fsp.lstat(filename) : await this._call(binding, 'lstat', filename); }
     catch (error) { if (missing(error)) return null; throw error; }
   }
-  async list(request = {}) {
+  async _readHostname(binding) {
+    let handle;
+    try {
+      handle = await this._call(binding, 'open', REMOTE_HOSTNAME, 'r');
+      const bytes = Buffer.alloc(256);
+      const result = await this._call(binding, 'read', handle, bytes, 0, bytes.length, 0);
+      return bytes.subarray(0, Array.isArray(result) ? result[0] : result).toString('utf8').trim();
+    } catch {
+      return '';
+    } finally {
+      if (handle) await this._call(binding, 'close', handle).catch(() => {});
+    }
+  }
+  async list(request = {}, terminalDirectory) {
     return this._operation(async () => {
-      const binding = await this._binding(request), directory = await this._path(binding, request.path);
+      const report = terminalDirectory === undefined ? null : directoryReport(terminalDirectory?.kind, terminalDirectory?.value);
+      if (terminalDirectory !== undefined && (!report || request.mode !== 'sftp')) throw new Error(UNKNOWN_DIRECTORY);
+      const binding = await this._binding(request);
+      let directory;
+      if (!report) directory = await this._path(binding, request.path);
+      else {
+        const profile = this._record(binding.terminalId).profile;
+        const requested = await resolveTerminalDirectory(report, {
+          host: profile.host || '', user: profile.username,
+          readHome: () => this._call(binding, 'realpath', '.'),
+          readHostname: () => this._readHostname(binding),
+        });
+        directory = await this._call(binding, 'realpath', requested);
+        if (!path.posix.isAbsolute(directory)) throw new Error('Текущий каталог терминала недоступен в SFTP.');
+      }
       let entries;
       if (binding.mode === 'local') {
         const names = await fsp.readdir(directory);
@@ -151,7 +179,7 @@ class FilesService {
         }))).filter(Boolean);
       } else {
         const data = await this._call(binding, 'readdir', directory);
-        const births = data.length ? await remoteBirthTimes(binding.sshClient, directory) : new Map();
+        const births = data.length && !report ? await remoteBirthTimes(binding.sshClient, directory) : new Map();
         entries = data.filter(entry => entry.filename !== '.' && entry.filename !== '..').map(entry => ({ name: entry.filename,
           path: path.posix.join(directory, entry.filename), isDirectory: entry.attrs.isDirectory(), isSymlink: entry.attrs.isSymbolicLink(),
           isFile: entry.attrs.isFile(), size: entry.attrs.size, permissions: permissions(entry.attrs.mode),
@@ -159,7 +187,7 @@ class FilesService {
           mtime: Number.isFinite(entry.attrs.mtime) ? entry.attrs.mtime * 1000 : null }));
       }
       this._assertBinding(binding);
-      this._directories.set(binding.mode === 'local' ? 'local' : binding.terminalId, directory);
+      if (!report) this._directories.set(binding.mode === 'local' ? 'local' : binding.terminalId, directory);
       entries.sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name));
       return { mode: binding.mode, terminalId: binding.terminalId, path: directory, entries };
     });

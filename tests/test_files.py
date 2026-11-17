@@ -538,6 +538,8 @@ class FileFollowTests(unittest.TestCase):
         browser._mode, browser._remote_path = "remote", "/remote/original"
         published, alive = [], [True]
         browser._sftp = types.SimpleNamespace(
+            normalize=lambda directory: directory,
+            stat=lambda directory: types.SimpleNamespace(st_mode=stat.S_IFDIR),
             put=lambda *args, **kwargs: alive.__setitem__(0, False), remove=lambda target: None)
         browser._remote_stat = lambda unused, target: None
         browser._remote_replace = lambda *args: published.append(True)
@@ -547,10 +549,18 @@ class FileFollowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             source = os.path.join(directory, "fixture.txt")
             Path(source).write_bytes(b"fixture")
-            browser.upload_paths([source], terminal_check=lambda: alive[0])
+            browser.upload_paths([source], terminal_check=lambda: alive[0],
+                                 terminal_directory=("", "", "/shell/cwd"))
             with self.assertRaises(IOError):
                 tasks[0]()
         self.assertEqual(published, [])
+
+    def test_unknown_terminal_directory_cannot_use_the_panel_path(self):
+        browser = self.browser()
+        browser._mode, browser._remote_path = "remote", "/remote/panel"
+        browser.upload_paths(["/local/file"], terminal_check=lambda: True)
+        self.assertEqual(browser.errors, [files.UNKNOWN_DIRECTORY])
+        self.assertIsNone(browser._pending_upload)
 
     def test_last_directory_survives_a_cancelled_listing_transport(self):
         browser = self.browser()

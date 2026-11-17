@@ -837,6 +837,8 @@ function addPane(record) {
     search,
     human: false,
     suppress: 0,
+    directoryReport: null,
+    directoryGeneration: record.generation,
     element: el("section", { class: "terminal-pane" }),
     heading: el("div", { class: "pane-heading" }),
     container: el("div", { class: "terminal-container" }),
@@ -875,8 +877,13 @@ function addPane(record) {
   // FitAddon reads the parent dimensions without subtracting its padding.
   pane.container.append(pane.viewport);
   pane.element.append(pane.heading, pane.container);
-  if (pane.profile.protocol === "ssh")
-    bindFileDrop(pane.container, () => pane.status === "running" ? pane.id : null);
+  if (pane.profile.protocol === "ssh") {
+    bindFileDrop(pane.container, () => pane.status === "running" ? pane.id : null, true);
+    term.parser.registerOscHandler(7, value => {
+      if (pane.directoryGeneration === pane.generation) pane.directoryReport = { kind: "osc7", value };
+      return true;
+    });
+  }
   state.panes.set(pane.id, pane);
   router.register(pane.id, pane.generation);
   router.update(pane.id, pane.generation, pane.status === "running");
@@ -931,6 +938,8 @@ function addPane(record) {
   });
   term.onTitleChange((title) => {
     pane.element.title = title.slice(0, 300);
+    if (pane.profile.protocol === "ssh" && pane.directoryGeneration === pane.generation)
+      pane.directoryReport = { kind: "title", value: title };
   });
   term.onResize((size) =>
     api.invoke("terminal:resize", { id: pane.id, ...size }).catch(() => {}),
@@ -1345,7 +1354,7 @@ function fileWarning(result) {
     );
 }
 
-function bindFileDrop(widget, terminalId) {
+function bindFileDrop(widget, terminalId, onTerminal = false) {
   const hasFiles = event => event.dataTransfer?.types.includes("Files");
   widget.addEventListener("dragover", event => {
     if (!hasFiles(event)) return;
@@ -1365,14 +1374,16 @@ function bindFileDrop(widget, terminalId) {
     event.stopPropagation();
     const pane = state.panes.get(terminalId());
     if (!event.isTrusted || !pane || pane.status !== "running" || state.files.busy) return;
-    uploadDroppedFiles(pane, Array.from(event.dataTransfer.files)).catch(showError);
+    uploadDroppedFiles(pane, Array.from(event.dataTransfer.files), onTerminal).catch(showError);
   });
 }
 
-async function uploadDroppedFiles(pane, sources) {
+async function uploadDroppedFiles(pane, sources, onTerminal) {
   const files = state.files;
   const directory = files.paths.get(pane.id);
-  const endpoint = { mode: "sftp", terminalId: pane.id, generation: pane.generation, path: directory };
+  const endpoint = { mode: "sftp", terminalId: pane.id, generation: pane.generation };
+  if (onTerminal) endpoint.terminalDirectory = pane.directoryReport;
+  else endpoint.path = directory;
   const viewRequest = files.request;
   files.busy++;
   $("file-spinner").hidden = false;
@@ -3081,6 +3092,9 @@ function handleEvent(event) {
   }
   if (type === "terminal:selection-reset") {
     pane.generation = payload.generation;
+    pane.directoryReport = null;
+    // The parser may still be consuming queued output from the previous SSH session.
+    pane.term.write("", () => { pane.directoryGeneration = payload.generation; });
     state.files.paths.delete(pane.id);
     router.update(pane.id, pane.generation, false);
     renderMulti();

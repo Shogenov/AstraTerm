@@ -1,8 +1,20 @@
 {
   "files": ["Перетаскивание A.txt", "drop-B.txt", "drop-C.txt"],
-  "directories": ["drop-a", "drop-b"],
+  "directories": ["drop-a", "drop-b", "terminal-cwd"],
   "maximum_files": 100,
-  "destination": "receiving-session-sftp-directory",
+  "destination": {"terminal": "working-directory-reported-by-shell", "panel": "visible-sftp-directory"},
+  "unknown_terminal_directory": "reject",
+  "directory_reports": [
+    {"kind": "osc7", "value": "file://fixture.example/srv/Work%20%23%20%D1%84", "expected": ["fixture.example", "", "/srv/Work # ф"]},
+    {"kind": "osc7", "value": "file:///C:/work", "expected": ["", "", "/C:/work"]},
+    {"kind": "osc7", "value": "file://localhost/srv/work", "expected": ["", "", "/srv/work"]},
+    {"kind": "title", "value": "alice@fixture: ~/project", "expected": ["fixture", "alice", "~/project"]},
+    {"kind": "title", "value": "(chroot)root@fixture: /srv/app", "expected": ["fixture", "root", "/srv/app"]},
+    {"kind": "title", "value": "alice@fixture: relative", "expected": null},
+    {"kind": "osc7", "value": "file:///bad%00path", "expected": null},
+    {"kind": "osc7", "value": "file:///bad%zzpath", "expected": null},
+    {"kind": "osc7", "value": "https://fixture.example/path", "expected": null}
+  ],
   "shell_input": false,
   "recursive_directories": false,
   "overwrite": "confirm-each-existing-file",

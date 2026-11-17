@@ -15,6 +15,7 @@ import os
 import json
 import pwd
 import shutil
+import shlex
 import signal
 import socket
 import stat
@@ -388,6 +389,12 @@ def main():
                 with open(os.path.join(os.path.dirname(os.path.dirname(__file__)),
                                        "shared", "contracts", "file-drops.json"), encoding="utf-8") as stream:
                     drop_contract = json.load(stream)
+                shell_directory = os.path.join(remote, drop_contract["directories"][2])
+                os.mkdir(shell_directory)
+                prompt = r"""printf '\033]0;%s@%s: %s\007' "$USER" "${HOSTNAME%%.*}" "$PWD" """
+                first.send("PROMPT_COMMAND={}; cd -- {}\n".format(shlex.quote(prompt), shlex.quote(shell_directory)))
+                wait(lambda: first.directory_report and first.directory_report[2] == shell_directory,
+                     "Bash reports its directory after cd")
                 drop_paths = [os.path.join(directory, name) for name in drop_contract["files"]]
                 for path in drop_paths:
                     with open(path, "wb") as stream:
@@ -416,8 +423,9 @@ def main():
                     wait_sftp("localhost", path_b)
                     selected[:] = drop_paths[:2]
                     pointer.drag(source, first.terminal)
-                    wait(lambda: all(os.path.isfile(os.path.join(path_a, os.path.basename(path)))
+                    wait(lambda: all(os.path.isfile(os.path.join(shell_directory, os.path.basename(path)))
                                      for path in selected), "file drop on inactive SSH pane")
+                    assert all(not os.path.exists(os.path.join(path_a, os.path.basename(path))) for path in selected)
                     assert all(not os.path.exists(os.path.join(path_b, os.path.basename(path))) for path in selected)
                     wait_sftp("127.0.0.1", path_a)
                     assert all(os.path.basename(path) not in terminal_text(first) for path in selected)
@@ -430,11 +438,11 @@ def main():
                             stream.write(b"replacement must be cancelled")
                         pointer.drag(source, first.terminal)
                         wait(lambda: bool(questions) and not browser._busy, "cancel overwritten dropped file")
-                        with open(os.path.join(path_a, os.path.basename(selected[0])), "rb") as stream:
+                        with open(os.path.join(shell_directory, os.path.basename(selected[0])), "rb") as stream:
                             assert stream.read() == os.path.basename(selected[0]).encode("utf-8")
                     finally:
                         browser._confirm_from_worker = original_confirm
-                    print("PASS native file drops use the receiving SFTP directory", flush=True)
+                    print("PASS terminal and SFTP panel drops use independent directories", flush=True)
                 finally:
                     pointer.close()
                     popup.destroy()

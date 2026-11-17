@@ -8,7 +8,7 @@ const path = require('node:path');
 const { createFixture } = require('./smoke-fixture.cjs');
 const keyboard = require('./keyboard-shortcuts-contract.cjs');
 
-module.exports = async function smoke({ window, store, vault, terminals, files, identities, finish }) {
+module.exports = async function smoke({ window, store, vault, terminals, files, identities, emit, finish }) {
   const output = path.resolve(process.env.ASTRA_SMOKE_OUTPUT || path.join(__dirname, '..', '..', 'dist', 'windows', 'validation'));
   fs.mkdirSync(output, { recursive: true });
   const report = { platform: process.platform, electron: process.versions.electron, packaged: require('electron').app.isPackaged, checks: [], result: 'RUNNING' };
@@ -297,7 +297,7 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
         window.webContents.startDrag = native;
       }
     });
-    await check('native file drops use the SFTP directory of the receiving pane', async () => {
+    await check('terminal and SFTP panel drops use independent directories', async () => {
       const fixtureDir = path.dirname(fixture.remoteRoot);
       const contract = require('./file-drop-contract.cjs');
       const localFiles = contract.files.map(name => path.join(fixtureDir, name));
@@ -305,6 +305,9 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
       for (const name of contract.directories) fs.mkdirSync(path.join(fixture.remoteRoot, name));
       await run(`__astraTest.loadFiles('/drop-a')`);
       await run(`(async()=>{__astraTest.focusPane(${JSON.stringify(second)});await __astraTest.syncFiles();await __astraTest.loadFiles('/drop-b')})()`);
+      const shellDirectory = contract.directories[2];
+      const pane = `__astraTest.state.panes.get(${JSON.stringify(first)})`;
+      const generation = terminals.get(first).generation;
       const inputs = fixture.counters.received.length;
       async function drop(bounds, filenames) {
         const target = await run(`(()=>{const r=${bounds}.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
@@ -322,10 +325,18 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
         await until(() => fs.existsSync(path.join(fixture.remoteRoot, 'drop-b', path.basename(localFiles[2]))), 'SFTP panel drop did not upload');
         await until(() => run('__astraTest.state.files.busy===0'), 'Panel drop still running');
         await run('__astraTest.overview(true)');
+        await drop(`${pane}.container`, [localFiles[0]]);
+        await until(() => run("document.getElementById('toasts').textContent.includes('Терминал не сообщил текущий каталог')"), 'Unknown shell directory should report an error');
+        assert.ok(!fs.existsSync(path.join(fixture.remoteRoot, 'drop-a', path.basename(localFiles[0]))));
+        emit('terminal:data', { id: first, generation, data: '\x1b]7;file:///drop-a\x07\x1b]7;file:///' });
+        emit('terminal:data', { id: first, generation, data: shellDirectory + '\x07' });
+        await until(() => run(`${pane}.directoryReport?.value===${JSON.stringify('file:///' + shellDirectory)}`), 'Shell directory passed through the xterm OSC parser');
         await drop(`__astraTest.state.panes.get(${JSON.stringify(first)}).container`, localFiles.slice(0, 2));
-        await until(() => localFiles.slice(0, 2).every(source => fs.existsSync(path.join(fixture.remoteRoot, 'drop-a', path.basename(source)))), 'Drop onto inactive terminal did not upload both files');
+        await until(() => localFiles.slice(0, 2).every(source => fs.existsSync(path.join(fixture.remoteRoot, shellDirectory, path.basename(source)))), 'Drop onto inactive terminal did not upload both files in its shell directory');
+        assert.ok(localFiles.slice(0, 2).every(source => !fs.existsSync(path.join(fixture.remoteRoot, 'drop-a', path.basename(source)))));
         assert.ok(localFiles.slice(0, 2).every(source => !fs.existsSync(path.join(fixture.remoteRoot, 'drop-b', path.basename(source)))));
         assert.equal(fixture.counters.received.length, inputs, 'File drop must not reach SSH shell input');
+        assert.equal(files._directories.get(first), '/drop-a');
         const synthetic = await run(`astra.uploadDropped({mode:'sftp',terminalId:${JSON.stringify(first)}},[new File(['test'],'synthetic.txt')]).then(()=>false,()=>true)`);
         assert.equal(synthetic, true, 'Renderer-created File must not authorize local disk access');
         await until(() => run('__astraTest.state.files.busy===0'), 'Terminal drop still running');
@@ -338,7 +349,7 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
           await drop(`__astraTest.state.panes.get(${JSON.stringify(first)}).container`, [localFiles[0]]);
           await until(() => questions === 1, 'Overwrite confirmation missing');
           await until(() => run('__astraTest.state.files.busy===0'), 'Cancelled drop still running');
-          assert.equal(fs.readFileSync(path.join(fixture.remoteRoot, 'drop-a', path.basename(localFiles[0])), 'utf8'), path.basename(localFiles[0]));
+          assert.equal(fs.readFileSync(path.join(fixture.remoteRoot, shellDirectory, path.basename(localFiles[0])), 'utf8'), path.basename(localFiles[0]));
         } finally { dialog.showMessageBox = originalConfirm; }
       } finally {
         window.webContents.debugger.detach();

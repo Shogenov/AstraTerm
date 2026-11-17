@@ -18,6 +18,7 @@ from . import __version__
 from .core import (SessionStore, _atomic_json, _config_lock, default_session, validate_session, session_argv,
                    parse_ssh_config, detect_dependencies, tcp_probe, tunnel_argv)
 from .terminal import TerminalWorkspace
+from .terminal_directory import UNKNOWN_DIRECTORY
 from .floating import FloatingWorkspace
 from .dialogs import SessionDialog, MacroDialog, error, confirm, name_dialog
 from .files import FileBrowser, bind_file_drop
@@ -363,9 +364,13 @@ class MainWindow(Gtk.Window):
         if self._layout_input_suspended or not current():
             self.set_status("Для загрузки нужен работающий SSH-терминал.")
             return
+        directory = pane.directory_report
+        if directory is None:
+            self.notify(UNKNOWN_DIRECTORY)
+            return
         pane.terminal.grab_focus()
         pane.on_focus(pane)
-        self.file_browser.upload_paths(paths, terminal_check=current)
+        self.file_browser.upload_paths(paths, terminal_check=current, terminal_directory=directory)
 
     def _connection_changed(self, pane):
         if pane.closed:

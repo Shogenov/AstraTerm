@@ -27,6 +27,7 @@ from gi.repository import Gdk, Gio, Gtk, GLib, Pango
 from .core import validate_jump_host, validate_session
 from .file_metadata import permissions, remote_birth_times
 from .file_sort import sort_rows
+from .terminal_directory import REMOTE_HOSTNAME, UNKNOWN_DIRECTORY, resolve_terminal_directory
 
 try:
     import paramiko
@@ -1327,7 +1328,7 @@ class FileBrowser(Gtk.Box):
         if source and generation == self._generation:
             self.upload_paths([source], directory=directory)
 
-    def upload_paths(self, sources, terminal_check=None, directory=None):
+    def upload_paths(self, sources, terminal_check=None, directory=None, terminal_directory=None):
         if self._closed:
             return
         if self._pending_upload or self._pending_profile is not None or (
@@ -1337,17 +1338,20 @@ class FileBrowser(Gtk.Box):
         if terminal_check is None and self._mode != "remote":
             self._status("Для загрузки выберите SSH-сессию и откройте SFTP.")
             return
+        if terminal_check is not None and terminal_directory is None:
+            self._error(UNKNOWN_DIRECTORY)
+            return
         if not 0 < len(sources) <= 100:
             self._error("Перетащите от 1 до 100 файлов.")
             return
         self._pending_upload = (tuple(sources), directory or self._remote_path, terminal_check,
-                                terminal_check is not None and self._operation_kind != "connect")
+                                terminal_check is not None and self._operation_kind != "connect", terminal_directory)
         self._resume_upload()
 
     def _resume_upload(self):
         if self._busy:
             return
-        sources, directory, terminal_check, may_connect = self._pending_upload
+        sources, directory, terminal_check, may_connect, terminal_directory = self._pending_upload
         self._pending_upload = None
         if terminal_check is not None and not terminal_check():
             self._status("SSH-подключение изменилось. Повторите загрузку.")
@@ -1357,18 +1361,34 @@ class FileBrowser(Gtk.Box):
                 generation = self._generation
                 self.connect_remote()
                 if self._busy and generation == self._generation and terminal_check():
-                    self._pending_upload = (sources, directory, terminal_check, False)
+                    self._pending_upload = (sources, directory, terminal_check, False, terminal_directory)
                     return
             self._status("SFTP недоступен. Подключите SFTP и повторите загрузку.")
             return
         sftp, directory = self._sftp, directory or self._remote_path or self._remote_home
         generation = self._generation
+        host, user, home = self.profile.get("host", ""), self.profile.get("username"), self._remote_home
 
         def check_binding():
             if self._closed or generation != self._generation or (terminal_check and not terminal_check()):
                 raise IOError("SSH-подключение изменилось. Загрузка отменена.")
 
         def upload():
+            target_directory = directory
+            if terminal_directory is not None:
+                def read_hostname():
+                    try:
+                        with sftp.open(REMOTE_HOSTNAME, "rb") as stream:
+                            return stream.read(256).decode("ascii", "replace").strip()
+                    except IOError:
+                        return ""
+                check_binding()
+                target_directory = resolve_terminal_directory(
+                    terminal_directory, host, user or os.environ.get("USER") or getpass.getuser(), home, read_hostname)
+                target_directory = sftp.normalize(target_directory)
+                if not posixpath.isabs(target_directory) or not stat.S_ISDIR(sftp.stat(target_directory).st_mode):
+                    raise IOError("Текущий каталог терминала недоступен в SFTP.")
+                check_binding()
             for source in sources:
                 if not os.path.isabs(source) or not stat.S_ISREG(os.lstat(source).st_mode):
                     raise IOError("Можно загружать только обычные локальные файлы.")
@@ -1377,7 +1397,7 @@ class FileBrowser(Gtk.Box):
             uploaded = 0
             for source in sources:
                 check_binding()
-                target = posixpath.join(directory, os.path.basename(source))
+                target = posixpath.join(target_directory, os.path.basename(source))
                 before = os.lstat(source)
                 if not stat.S_ISREG(before.st_mode):
                     raise IOError("Исходный файл больше не является обычным файлом.")
@@ -1389,7 +1409,7 @@ class FileBrowser(Gtk.Box):
                     if not self._confirm_from_worker("Заменить файл на сервере?", target, generation):
                         continue
                 check_binding()
-                temporary = posixpath.join(directory, ".astraterm-upload-" + uuid.uuid4().hex)
+                temporary = posixpath.join(target_directory, ".astraterm-upload-" + uuid.uuid4().hex)
                 try:
                     sftp.put(source, temporary, callback=self._progress)
                     check_binding()

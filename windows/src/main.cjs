@@ -248,9 +248,9 @@ function captureBinding(request) {
   };
 }
 
-async function uploadFiles(endpoint, sources, check, results = []) {
+async function uploadFiles(endpoint, sources, check, results = [], terminalDirectory) {
   check();
-  const listing = await files.list(endpoint);
+  const listing = await files.list(endpoint, terminalDirectory);
   const names = sources.map(source => path.basename(source));
   for (const source of sources) {
     if (!path.isAbsolute(source) || !(await fs.promises.lstat(source)).isFile()) {
@@ -727,7 +727,7 @@ async function createWindow() {
       throw new Error('Некорректная загрузка по SFTP.');
     }
     const results = [];
-    try { await uploadFiles(endpoint, paths, captureBinding(endpoint), results); }
+    try { await uploadFiles(endpoint, paths, captureBinding(endpoint), results, endpoint.terminalDirectory); }
     catch (error) { return { results, error: safeError(error) }; }
     return { results };
   });

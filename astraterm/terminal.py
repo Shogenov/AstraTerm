@@ -16,6 +16,7 @@ from gi.repository import Gtk, Gdk, GLib, Gio, Pango, Vte
 
 from .core import session_argv
 from .vte_input import InputTerminal
+from .terminal_directory import directory_report
 
 
 PALETTE = ["#242a30", "#df7d85", "#90bf8f", "#d6bc83", "#8faedb", "#b69dcf", "#85bfc2", "#d9e1e8",
@@ -45,6 +46,7 @@ class TerminalPane(Gtk.Box):
         self.on_paste_pending_restart = on_paste_pending_restart
         self.input_retired = False
         self.connection_generation = 0
+        self.directory_report = None
         self.pid = None
         self.closed = False
         self.exited = False
@@ -141,6 +143,7 @@ class TerminalPane(Gtk.Box):
         self.search_bar.set_no_show_all(True)
         self.terminal.connect("child-exited", self._child_exited)
         self.terminal.connect("window-title-changed", self._title_changed)
+        self.terminal.connect("current-directory-uri-changed", self._directory_changed)
         self.terminal.connect("focus-in-event", self._focused)
         self.terminal.connect("button-press-event", self._button_press)
         self.terminal.connect("bell", lambda *_: self.on_status("Звуковой сигнал терминала"))
@@ -159,6 +162,7 @@ class TerminalPane(Gtk.Box):
         if self.profile.get('_credential_gate') and not self.profile['_credential_gate'](self.start):
             return False
         try:
+            self.directory_report = None
             argv = self.profile.get("_argv") or session_argv(self.profile)
             if (self.profile.get('_credential_provider') and self.profile.get('protocol') == 'ssh' and
                     not self.profile.get('key_file') and not self.profile.get('_agent_key_blob')):
@@ -231,6 +235,7 @@ class TerminalPane(Gtk.Box):
     def _child_exited(self, terminal, status):
         self._close_credentials()
         self._drain_master()
+        self.directory_report = None
         self.pid = None
         self.connection_generation += 1
         self.on_connection(self)
@@ -282,9 +287,16 @@ class TerminalPane(Gtk.Box):
             self._close_master()
 
     def _title_changed(self, terminal):
-        title = terminal.get_window_title() or self.profile.get("name", "Terminal")
+        reported = terminal.get_window_title()
+        if self.pid is not None and self.profile.get("protocol") == "ssh":
+            self.directory_report = directory_report("title", reported)
+        title = reported or self.profile.get("name", "Terminal")
         self.title_label.set_text(title)
         self.on_title(self, title)
+
+    def _directory_changed(self, terminal):
+        if self.pid is not None and self.profile.get("protocol") == "ssh":
+            self.directory_report = directory_report("osc7", terminal.get_current_directory_uri())
 
     def _focused(self, *_):
         self.on_focus(self)
