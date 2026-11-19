@@ -10,10 +10,10 @@
     "start": "electron .",
     "test": "node --test tests/*.test.cjs",
     "smoke": "electron . --smoke-test",
-    "dist": "electron-builder --win nsis portable zip",
+    "dist": "electron-builder --win nsis portable zip --publish never",
     "prestart": "node tools/build-native.cjs",
     "presmoke": "node tools/build-native.cjs",
-    "predist": "node tools/build-native.cjs"
+    "predist": "install-electron && node tools/build-native.cjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.11.0",
