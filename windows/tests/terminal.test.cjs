@@ -148,8 +148,11 @@ test('local PowerShell runs on genuine Windows ConPTY with interactive output an
   await until(() => output.join('').includes('PS '), 20000);
   manager.write(local.id, "[Console]::WriteLine('ASTRA_CONPTY_' + (6 * 7))\r");
   await until(() => output.join('').includes('ASTRA_CONPTY_42'), 20000);
-  manager.write(local.id, "[Console]::WriteLine('ASTRA_CWD_' + (Get-Location).Path)\r");
-  await until(() => output.join('').includes('ASTRA_CWD_' + directory), 20000);
+  // The runner's TEMP can use an 8.3 alias while PowerShell displays the long path.
+  const expectedDirectory = fs.realpathSync.native(directory).replace(/'/g, "''");
+  manager.write(local.id, `[Console]::WriteLine('ASTRA_CWD_' + ((Get-Item -LiteralPath .).FullName -ieq '${expectedDirectory}'))\r`);
+  await until(() => /ASTRA_CWD_(True|False)/.test(output.join('')), 20000);
+  assert.match(output.join(''), /ASTRA_CWD_True/, 'PowerShell started in the wrong directory');
   manager.write(local.id, "[Console]::WriteLine('ASTRA_UNDO_' + (6 * 7))");
   await new Promise(resolve => setTimeout(resolve, 250));
   manager.write(local.id, 'Q');
