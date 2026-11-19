@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sign release metadata and deploy static files over certificate-checked FTPS.
 
-Signing keys stay outside the project. Passwords are prompted, never stored.
+Signing keys stay outside the project. Passwords come from a prompt or CI secrets.
 """
 from __future__ import print_function
 import argparse
@@ -217,7 +217,7 @@ def main(argv=None):
         return
     if not args.host or not args.user or not args.root or not args.release_dir:
         raise ValueError('Provide deployment host, user, root and release directory')
-    password = getpass.getpass('FTPS password (not stored): ')
+    password = os.environ.pop('ASTRATERM_DEPLOY_PASSWORD', None) or getpass.getpass('FTPS password (not stored): ')
     client = FTPS(args.host, args.user, password, args.root)
     password = None
     try:
@@ -226,9 +226,18 @@ def main(argv=None):
             # Verify the previous feed before merging an untouched platform.
             import sys
             sys.path.insert(0, str(ROOT))
-            from astraterm.updates import read_manifest
-            read_manifest(previous, platform=args.platforms[0], current='0.0.0')
-            previous = json.loads(base64.b64decode(json.loads(previous.decode())['payload']).decode())
+            from astraterm.updates import read_manifest, version_tuple
+            envelope = json.loads(previous.decode('utf-8'))
+            payload = json.loads(base64.b64decode(envelope['payload']).decode('utf-8'))
+            current = json.loads((ROOT / 'shared/product.json').read_text(encoding='utf-8'))['version']
+            known_platforms = sorted(set(payload['releases']).intersection(('windows', 'linux')))
+            if not known_platforms:
+                raise ValueError('No platform found in the previous release feed')
+            for platform in known_platforms:
+                published = read_manifest(previous, platform=platform, current=current)
+                if platform in args.platforms and version_tuple(published['version']) > version_tuple(current):
+                    raise ValueError('A newer release is already published for ' + platform)
+            previous = payload
         files, payload, envelope = prepare(args.release_dir, args.platforms, args.signing_key, args.notes, previous)
         if args.site:
             try:

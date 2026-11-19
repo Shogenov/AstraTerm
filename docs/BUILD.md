@@ -17,6 +17,21 @@ Get-Help .\build-all.ps1 -Full
 | `build-linux.ps1` | Linux `.deb` и исходный TAR.GZ; builder — Linux по SSH |
 | `build-all.ps1` | Оба набора одной общей версии и суммарный отчёт |
 
+## Выпуск через GitHub Actions
+
+В **Actions → AstraTerm Release → Run workflow** можно собрать и проверить обе платформы. Установщик, portable EXE, ZIP, DEB, исходные архивы и контрольные суммы доступны в артефактах прогона. Windows-сборку проверяет portable smoke-тест, Linux-пакет собирается и проверяется на Ubuntu с GTK/VTE под Xvfb. Проверка именно на Astra Linux SE 1.6 выполняется отдельно на целевой ОС.
+
+Чтобы выпустить следующую версию, обновите `shared/product.json` через генератор, закоммитьте результат в `main` и отправьте соответствующий тег. Например, для `0.10.22` после отправки коммита в `main` выполните:
+
+```powershell
+git tag -a v0.10.22 -m "Описание изменений 0.10.22"
+git push origin v0.10.22
+```
+
+Прогон проверяет соответствие тега версии из `shared/product.json` и принадлежность коммита истории `main`. После обеих сборок он загружает проверенные файлы в черновик GitHub Release, публикует на сайте пакеты и подписанный список обновлений, затем открывает GitHub Release. При ошибке публикации выберите **Re-run failed jobs**, чтобы использовать артефакты прошедших сборок из того же прогона.
+
+Этап публикации использует окружение GitHub `production` с правилом для тегов `v*`. В нём нужны секреты `ASTRATERM_DEPLOY_HOST`, `ASTRATERM_DEPLOY_USER`, `ASTRATERM_DEPLOY_ROOT`, `ASTRATERM_DEPLOY_PASSWORD` и `ASTRATERM_SIGNING_KEY` (существующий приватный PEM-ключ, соответствующий публичному ключу обновлений). У `GITHUB_TOKEN` право `contents: write` есть только на этапе публикации.
+
 ## Рабочий компьютер
 
 Для Windows build/deploy можно один раз создать изолированную среду на Python 3.9+ (кроме 3.9.0/3.9.1): `python -m venv .venv/build`, затем `.venv/build/Scripts/python.exe -m pip install -r tools/build-requirements-windows.txt`. Три скрипта автоматически выбирают её, если не передан `-Python`; текущая машина подготовлена. Это зависимости сборщика, не пользователя приложения. Пакеты/интерпретатор Astra не обновляются этим файлом.

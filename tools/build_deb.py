@@ -27,13 +27,15 @@ def builder_command():
     if not executable:
         raise RuntimeError("Нужен dpkg-deb. Запустите сборку на Astra Linux / Debian.")
     help_text = subprocess.check_output([executable, "--help"]).decode("utf-8", "replace")
+    # Recent Ubuntu uses zstd by default, which Astra Linux 1.6's dpkg cannot read.
+    build = [executable, "-Zxz", "--build"]
     if "--root-owner-group" in help_text:
-        return [executable, "--root-owner-group", "--build"]
+        return [executable, "--root-owner-group"] + build[1:]
     if hasattr(os, "geteuid") and os.geteuid() == 0:
-        return [executable, "--build"]
+        return build
     fakeroot = shutil.which("fakeroot")
     if fakeroot:
-        return [fakeroot, executable, "--build"]
+        return [fakeroot] + build
     raise RuntimeError("Этот dpkg-deb требует fakeroot или сборку через sudo, чтобы файлы пакета принадлежали root.")
 
 
