@@ -206,6 +206,8 @@ class _NativeClient(object):
         self.channel = None
         self.broker = None
         self.directory = None
+        self.control_path = None
+        self.host = None
         self.authenticated = False
         self._stderr = bytearray()
         self._stderr_lock = threading.Lock()
@@ -235,6 +237,33 @@ class _NativeClient(object):
     def set_keepalive(self, unused_seconds):
         # OpenSSH owns keepalives through the explicit ServerAlive options.
         pass
+
+    def execute_sudo_command(self, command, password):
+        if not self.is_authenticated() or not self.control_path:
+            raise NativeSSHError("Подключение SFTP изменилось.")
+        # A missing mux socket must fail rather than open a fresh SSH connection.
+        process = subprocess.Popen(
+            ["ssh", "-F", "/dev/null", "-T", "-S", self.control_path,
+             "-o", "BatchMode=yes", "-o", "ProxyCommand=false", "--", self.host, command],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)
+        timer = threading.Timer(20, process.kill)
+        timer.daemon = True
+        timer.start()
+        try:
+            if password is not None:
+                process.stdin.write((password + '\n').encode('utf-8'))
+            process.stdin.close()
+            output = process.stderr.read(16385)
+            if len(output) > 16384:
+                raise NativeSSHError("Сервер вернул слишком большой ответ sudo.")
+            return process.wait(), output
+        finally:
+            timer.cancel()
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+            process.stdin.close()
+            process.stderr.close()
 
     def _drain_stderr(self):
         try:
@@ -390,6 +419,8 @@ def connect_openssh_sftp(profile, secret, policy, known_hosts,
             raise NativeSSHError("Подключение SFTP отменено.")
         client.directory = tempfile.mkdtemp(prefix="astraterm-sftp-")
         os.chmod(client.directory, 0o700)
+        client.control_path = os.path.join(client.directory, "control")
+        client.host = profile["host"]
         environment = dict(os.environ)
         if original.get("_ssh_agent_sock"):
             environment["SSH_AUTH_SOCK"] = original["_ssh_agent_sock"]
@@ -408,7 +439,7 @@ def connect_openssh_sftp(profile, secret, policy, known_hosts,
         options = ["-T", "-o", "ConnectTimeout=12", "-o", "ServerAliveInterval=30",
                    "-o", "ServerAliveCountMax=2", "-o", "ClearAllForwardings=yes",
                    "-o", "ForwardAgent=no", "-o", "ForwardX11=no",
-                   "-o", "ControlMaster=no", "-o", "ControlPath=none",
+                   "-o", "ControlMaster=yes", "-o", "ControlPath=" + _config_path(client.control_path),
                    "-o", "StrictHostKeyChecking=ask", "-o", "NumberOfPasswordPrompts=1",
                    "-o", "UserKnownHostsFile=" + _config_path(known_hosts),
                    "-p", str(profile["port"])]

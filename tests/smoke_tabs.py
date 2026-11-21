@@ -51,9 +51,16 @@ class Pointer(object):
         return x + widget.get_allocated_width() // 2, y + widget.get_allocated_height() // 2
 
     def drag(self, source, target):
-        start, end = self.center(source), self.center(target)
+        start = self.center(source)
         self.move(*start)
         self.button(1, True)
+        if not target.get_visible():
+            self.move(start[0] + 16, start[1] + 10)
+            start = self.center(target.get_toplevel())
+            self.move(*start)
+            wait_for(target.get_visible, 'cancellation target appears on drag')
+            assert target.get_allocated_width() >= 250
+        end = self.center(target)
         for step in range(1, 11):
             self.move(start[0] + (end[0]-start[0])*step/10, start[1] + (end[1]-start[1])*step/10)
         self.button(1, False)
@@ -295,6 +302,7 @@ def main():
                         assert clipboard.wait_for_text() == selection['expected'], repr(clipboard.wait_for_text())
                         terminal.feed(("CAPTURE_READY_" + case['source'][0]).encode('ascii'))
                         pointer.drag(owners['source'].tab_header, window.cancel_drop)
+                        assert not window.cancel_drop.get_visible()
                         assert window.notebook.get_n_pages() == 3
                         assert not window._dragged_workspace
                         window.notify('Тестовое уведомление')

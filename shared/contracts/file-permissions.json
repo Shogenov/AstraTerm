@@ -1,0 +1,5 @@
+{
+  "modes": {"000": 0, "644": 420, "2755": 1517, "7777": 4095},
+  "invalid": ["", "8", "689", "12345", "-755", "u+x", "0o644", " 644", "644\n"],
+  "sudo": {"challenge": "sudo: a password is required", "retry": "single-stdin-password"}
+}

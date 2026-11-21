@@ -18,7 +18,7 @@ class BuildTests(unittest.TestCase):
     def version_fixture(self, directory):
         root = Path(directory) / 'repo'
         for relative in ('tools/build.py', 'tools/sync_shared.py', 'tools/package.py',
-                         'tools/package_windows.py', 'tools/release.py', 'shared/product.json'):
+                         'tools/package_windows.py', 'tools/release.py', 'shared/product.json', 'shared/sftp-chmod.py'):
             target = root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(str(build.ROOT / relative), str(target))

@@ -72,6 +72,13 @@ class SFTP(paramiko.SFTPServerInterface):
         self.entries[newpath] = self.entries.pop(oldpath)
         return paramiko.SFTP_OK
 
+    def chattr(self, path, attr):
+        if path not in self.entries or attr.st_mode is None:
+            return paramiko.SFTP_FAILURE
+        old, size = self.entries[path]
+        self.entries[path] = ((old & ~0o7777) | (attr.st_mode & 0o7777), size)
+        return paramiko.SFTP_OK
+
     def open(self, path, flags, attr):
         if path != '/fixture.txt' or flags & (os.O_WRONLY | os.O_RDWR):
             return paramiko.SFTP_PERMISSION_DENIED
@@ -203,6 +210,13 @@ def main():
                 rename_with_f2(browser.tree, "Переименовать", names)
                 wait_for(lambda: any(row[1] == names[1] for row in browser.model), "SFTP F2 rename applied")
             print("PASS F2 renames SFTP file and directory", flush=True)
+            row = next(tuple(item) for item in browser.model if item[1] == 'fixture.txt')
+            with mock.patch('astraterm.files.permissions_dialog', return_value=(0o644, False)) as permissions:
+                browser._chmod(row)
+                wait_for(lambda: any(item[1] == 'fixture.txt' and item[7] == 'rw-r--r--' for item in browser.model),
+                         'SFTP chmod and permissions refresh')
+                assert permissions.call_args[0][1:] == ('fixture.txt', 0o640)
+            print("PASS SFTP permissions editor applies mode and refreshes metadata", flush=True)
             recording=root/'import-recording.log'
             recorded_profile=dict(profile,_recording_path=str(recording))
             window.open_session(recorded_profile)

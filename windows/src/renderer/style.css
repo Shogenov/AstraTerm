@@ -789,8 +789,27 @@ footer:has(.host-stats:not([hidden])) #connection-info { display:none; }
 .toast .icon-button { pointer-events: auto; flex: none; }
 .component-notices { max-height: 280px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .update-progress { width: 100%; margin: 8px 0 16px; accent-color: var(--accent); }
-#cancel-drop { flex: none; padding: 1px 6px; border: 1px dashed var(--line); border-radius: 4px; }
+#cancel-drop {
+  position: fixed;
+  z-index: 30;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  width: min(280px, 90vw);
+  min-height: 52px;
+  padding: 6px 12px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px dashed var(--muted);
+  border-radius: 8px;
+  font-size: 13px;
+}
+#cancel-drop[hidden] { display: none; }
 #cancel-drop.active { color: var(--accent); border-color: var(--accent); }
+.permission-grid { width: 100%; margin: 0 0 12px; border-spacing: 8px; text-align: center; }
+.permission-grid th[scope="row"] { text-align: left; }
 .toast.error {
   border-color: #63424a;
   background: #362a30;

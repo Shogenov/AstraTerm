@@ -27,7 +27,8 @@ def source_files(root=ROOT):
                     if path.is_file() and "__pycache__" not in path.parts:
                         selected.add(path)
     for relative in ("README.md", "agent.md", "AGENTS.md", "LICENSE", "CHANGELOG.md", "build-windows.ps1", "build-linux.ps1", "build-all.ps1",
-                     "tools/package.py", "tools/package_windows.py", "tools/build_deb.py", "tools/sync_shared.py", "tools/build.py"):
+                     "tools/package.py", "tools/package_windows.py", "tools/build_deb.py", "tools/sync_shared.py", "tools/build.py",
+                     "shared/sftp-chmod.py"):
         path = root / relative
         if path.is_file():
             selected.add(path)

@@ -373,8 +373,14 @@ function popupMenu(method, args) {
   } else if (method === 'ui:fileMenu') {
     const payload = { entry: args.entry || null, binding: { mode: args.mode, terminalId: args.terminalId || null, path: args.path, generation: args.generation } };
     template = [item('Новая папка…', 'file-mkdir', payload)];
-    if (args.entry) template.push(item('Открыть', 'file-edit', payload), item('Скачать…', 'file-download', payload, { enabled: !args.entry.isDirectory }),
-      item('Переименовать…', 'file-rename', payload), { type: 'separator' }, item('Удалить…', 'file-delete', payload));
+    if (args.entry) {
+      template.push(item('Открыть', 'file-edit', payload), item('Скачать…', 'file-download', payload, { enabled: !args.entry.isDirectory }),
+        item('Переименовать…', 'file-rename', payload));
+      if (args.mode === 'sftp' && !args.entry.isSymlink && (args.entry.isDirectory || args.entry.isFile)) {
+        template.push(item('Права…', 'file-permissions', payload));
+      }
+      template.push({ type: 'separator' }, item('Удалить…', 'file-delete', payload));
+    }
   } else {
     template = [
       { label: 'Файл', submenu: [item('Новое подключение…', 'new-session'), item('Новая папка…', 'new-group'), item('Локальный PowerShell', 'new-local'),
@@ -574,6 +580,11 @@ async function call(method, args) {
       }));
     case 'files:mkdir': return files.mkdir(args);
     case 'files:rename': return files.rename(args);
+    case 'files:permission-details': return files.permissionDetails(args);
+    case 'files:permissions':
+      requireIdleFiles();
+      return files.changePermissions(args, host => prompt({ kind: 'sudo-password', secret: true,
+        title: 'Пароль sudo', label: 'Пароль sudo', message: 'Сервер ' + host + ' запросил пароль sudo.' }));
     case 'files:remove': { const check = captureBinding(args); if (!await confirm('Удалить файл или папку?', args.path + '\nНепустые каталоги не удаляются.', 'Удалить')) return null; check(); return files.remove(args); }
     case 'files:readText': return files.readText(args);
     case 'files:writeText': return files.writeText(args);

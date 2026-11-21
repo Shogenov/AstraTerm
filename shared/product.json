@@ -1,6 +1,6 @@
 {
   "name": "AstraTerm",
-  "version": "0.10.21",
+  "version": "0.10.22",
   "session_schema_version": 2,
   "protocols": [
     "local",

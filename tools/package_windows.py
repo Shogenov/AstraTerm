@@ -37,7 +37,8 @@ def source_files(root=ROOT):
                      'windows/tests/electron-env.cjs', 'windows/tests/vm-integration.cjs',
                      'README.md', 'agent.md', 'AGENTS.md', 'LICENSE',
                      'docs/FEATURES.md', 'docs/ROADMAP.md', 'tools/package_windows.py',
-                     'tools/sync_shared.py', 'tools/build.py', 'build-windows.ps1', 'build-linux.ps1', 'build-all.ps1'):
+                     'tools/sync_shared.py', 'tools/build.py', 'build-windows.ps1', 'build-linux.ps1', 'build-all.ps1',
+                     'shared/sftp-chmod.py'):
         filename = root / relative
         if filename.is_file() and not filename.is_symlink():
             selected.add(filename)

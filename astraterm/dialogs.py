@@ -33,11 +33,13 @@ def confirm(parent, text, detail=""):
     return response == Gtk.ResponseType.OK
 
 
-def name_dialog(parent, title, initial=""):
+def name_dialog(parent, title, initial="", secret=False):
     dialog = Gtk.Dialog(title=title, transient_for=parent, modal=True)
     dialog.add_buttons("Отмена", Gtk.ResponseType.CANCEL, "Сохранить", Gtk.ResponseType.OK)
     dialog.set_default_response(Gtk.ResponseType.OK)
-    entry = Gtk.Entry(text=initial, activates_default=True)
+    entry = Gtk.Entry(text=initial, activates_default=True, visibility=not secret)
+    if secret:
+        entry.set_input_purpose(Gtk.InputPurpose.PASSWORD)
     content = dialog.get_content_area()
     content.set_border_width(16)
     content.add(entry)
@@ -45,6 +47,8 @@ def name_dialog(parent, title, initial=""):
     entry.grab_focus()
     entry.select_region(0, -1)
     answer = entry.get_text() if dialog.run() == Gtk.ResponseType.OK else None
+    if secret:
+        entry.set_text("")
     dialog.destroy()
     return answer
 

@@ -40,6 +40,8 @@
 
 ## Где менять
 
+- SFTP **Права…**: GTK `files._chmod` / `file_permissions.py`, Electron `editFilePermissions` / `backend/file-permissions.cjs`. Обычный режим использует SFTP chmod. Sudo открывает exec-канал того же SSH-транспорта, выполняет фиксированный `shared/sftp-chmod.py`, отправляет пароль только в stdin при запросе. Помощник проверяет ревизию и меняет права по дескриптору без перехода через ссылки. Контракт `shared/contracts/file-permissions.json`.
+
 - Ключ `-Version` всех трёх build scripts передаётся в `tools/build.py --version` и перед сборкой обновляет общий product через `sync_shared.set_version/synchronize`. `-Plan` сохраняет файлы. Публикация сайта и релиза включается `-Deploy`. Описание всех параметров — `Get-Help ./build-all.ps1 -Full`, сценарии — `docs/BUILD.md`.
 
 - Сайт/обновления с 0.10.0: [UPDATES.md](UPDATES.md). Основной пользовательский шаблон — `website/production/`, сборщик — `tools/website_build.py`; три концепции сохранены под `/alternatives/`. `tools/release.py` подписывает RSA-PSS список релизов и публикует проверенные native-артефакты по FTPS через `-Deploy` трёх build scripts. Подпись/HTTPS/размер/SHA-256 обязательны; URL/команды не принимать от renderer. Python `updates.py`/`update_ui.py`, Windows `backend/updates.cjs`/`update-ui.cjs`/`update-install.ps1`. Приватный ключ — вне checkout/хостинга, в product только публичный; доступы не хранить. Windows заменяет portable EXE после выхода с `.previous`; Linux — проверенный DEB через системный установщик и явный перезапуск.

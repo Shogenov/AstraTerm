@@ -350,6 +350,7 @@ let draggedPane = null;
 function clearTabDrag() {
   draggedTab = null;
   draggedPane = null;
+  $("cancel-drop").hidden = true;
   $("tabs").classList.remove("tab-dragging", "drop-target");
   for (const tab of document.querySelectorAll(".tab.drop-target"))
     tab.classList.remove("drop-target");
@@ -364,6 +365,7 @@ function startTabDrag(event, kind, id) {
   draggedPane = kind === PANE_DRAG_TYPE ? id : null;
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData(kind, id);
+  $("cancel-drop").hidden = false;
   $("tabs").classList.add("tab-dragging");
 }
 function validTabDrag(event) {
@@ -374,6 +376,29 @@ function validTabDrag(event) {
 function bindCancelDrop() {
   const zone = $("cancel-drop");
   const canCancel = event => validTabDrag(event) || event.dataTransfer?.types.includes("Files");
+  let leaveTimer;
+  const hide = () => {
+    if (!draggedTab && !draggedPane) zone.hidden = true;
+    zone.classList.remove("active");
+  };
+  const showFiles = event => {
+    if (!event.dataTransfer?.types.includes("Files")) return;
+    clearTimeout(leaveTimer);
+    zone.hidden = false;
+  };
+  document.addEventListener("dragenter", showFiles, true);
+  document.addEventListener("dragover", showFiles, true);
+  document.addEventListener("dragleave", event => {
+    if (!event.relatedTarget) {
+      clearTimeout(leaveTimer);
+      leaveTimer = setTimeout(hide, 160);
+    }
+  }, true);
+  document.addEventListener("drop", () => {
+    clearTimeout(leaveTimer);
+    leaveTimer = setTimeout(hide, 0);
+  }, true);
+  document.addEventListener("dragend", hide, true);
   zone.addEventListener("dragover", event => {
     if (!canCancel(event)) return;
     event.preventDefault();
@@ -387,6 +412,7 @@ function bindCancelDrop() {
     event.preventDefault();
     event.stopPropagation();
     if (draggedTab || draggedPane) clearTabDrag();
+    hide();
   });
 }
 function detachPane(id) {
@@ -1450,6 +1476,75 @@ async function fileAction(action) {
     $("file-spinner").hidden = files.busy === 0;
     renderFiles();
   }
+}
+async function editFilePermissions({ entry, binding }) {
+  const files = state.files;
+  const current = () => files.mode === "sftp" && files.terminalId === binding.terminalId &&
+    files.path === binding.path && state.panes.get(binding.terminalId)?.generation === binding.generation;
+  if (!entry || !current() || files.busy) return;
+  const endpoint = { ...binding, path: entry.path };
+  const { mode, revision } = await api.invoke("files:permission-details", endpoint);
+  if (!current()) return;
+  const dialog = dialogShell("Права · " + entry.name);
+  const columns = ["Чтение", "Запись", "Выполнение"];
+  const checks = [];
+  const grid = el("table", { class: "permission-grid" });
+  grid.append(el("tr", {}, el("td"), ...columns.map(text => el("th", { scope: "col", text }))));
+  for (const label of ["Владелец", "Группа", "Остальные"]) {
+    const row = el("tr", {}, el("th", { scope: "row", text: label }));
+    for (const column of columns) {
+      const check = el("input", { type: "checkbox", "aria-label": label + " · " + column });
+      check.addEventListener("change", toggle);
+      checks.push(check);
+      row.append(el("td", {}, check));
+    }
+    grid.append(row);
+  }
+  const octal = el("input", { type: "text", inputmode: "numeric", maxlength: 4,
+    value: mode.toString(8).padStart(3, "0"), "aria-label": "Восьмеричный режим" });
+  const symbolic = el("output");
+  const sudo = el("input", { type: "checkbox" });
+  const apply = el("button", { class: "primary", text: "Применить", onclick: command(async () => {
+    if (files.busy || !current()) throw new Error("Файловая панель переключилась. Выберите объект заново.");
+    const request = { ...endpoint, revision, octal: octal.value, sudo: sudo.checked };
+    await dialog.close();
+    files.busy++;
+    $("file-spinner").hidden = false;
+    renderFiles();
+    try {
+      const changed = await api.invoke("files:permissions", request);
+      if (changed && current()) await loadFiles(binding.path);
+    } finally {
+      files.busy--;
+      $("file-spinner").hidden = files.busy === 0;
+      renderFiles();
+    }
+  }) });
+  function render() {
+    const valid = [3, 4].includes(octal.value.length) && !/[^0-7]/.test(octal.value);
+    apply.disabled = !valid;
+    if (!valid) { symbolic.textContent = "—"; return; }
+    const value = Number.parseInt(octal.value, 8);
+    const letters = checks.map((check, index) => {
+      check.checked = Boolean(value & (1 << (8 - index)));
+      return check.checked ? "rwx"[index % 3] : "-";
+    });
+    for (const [index, bit, letter] of [[2, 0o4000, "s"], [5, 0o2000, "s"], [8, 0o1000, "t"]])
+      if (value & bit) letters[index] = checks[index].checked ? letter : letter.toUpperCase();
+    symbolic.textContent = letters.join("");
+  }
+  function toggle() {
+    const special = (apply.disabled ? mode : Number.parseInt(octal.value, 8)) & 0o7000;
+    const value = checks.reduce((bits, check, index) => check.checked ? bits | (1 << (8 - index)) : bits, special);
+    octal.value = value.toString(8).padStart(3, "0");
+    render();
+  }
+  octal.addEventListener("input", render);
+  dialog.body.append(grid, el("label", {}, "Восьмеричный режим ", octal), symbolic,
+    el("label", { class: "check" }, sudo, "Выполнить через sudo, если у вас есть права sudo"));
+  dialog.footer.append(el("button", { text: "Отмена", onclick: dialog.close }), apply);
+  render();
+  dialog.show();
 }
 async function editFile(entry) {
   const endpoint = {
@@ -2945,6 +3040,8 @@ async function action(name, payload = {}) {
       return fileAction("download");
     case "file-rename":
       return fileAction("rename");
+    case "file-permissions":
+      return editFilePermissions(payload);
     case "file-delete":
       return fileAction("remove");
     case "file-mkdir":

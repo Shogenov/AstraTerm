@@ -26,6 +26,7 @@ from gi.repository import Gdk, Gio, Gtk, GLib, Pango
 
 from .core import validate_jump_host, validate_session
 from .file_metadata import permissions, remote_birth_times
+from .file_permissions import permission_revision, permissions_dialog, sudo_chmod
 from .file_sort import sort_rows
 from .terminal_directory import REMOTE_HOSTNAME, UNKNOWN_DIRECTORY, resolve_terminal_directory
 
@@ -39,7 +40,22 @@ MAX_EDIT_SIZE = 2 * 1024 * 1024
 MAX_REMOTE_CONNECTIONS = 8
 
 
-def bind_file_drop(widget, receive):
+def watch_file_drag(widget, visibility):
+    def motion(target, context, *_):
+        if target.drag_dest_find_target(context, None):
+            visibility(True)
+        return False
+
+    def leave(*_):
+        visibility(False)
+        return False
+
+    widget.connect("drag-motion", motion)
+    widget.connect("drag-leave", leave)
+    widget.connect("drag-drop", leave)
+
+
+def bind_file_drop(widget, receive, visibility=None):
     targets = [Gtk.TargetEntry.new("text/uri-list", 0, 0)]
     widget.drag_dest_set(Gtk.DestDefaults.MOTION | Gtk.DestDefaults.HIGHLIGHT,
                          targets, Gdk.DragAction.COPY)
@@ -73,6 +89,8 @@ def bind_file_drop(widget, receive):
         if accepted:
             receive(paths)
 
+    if visibility is not None:
+        watch_file_drag(widget, visibility)
     widget.connect("drag-drop", request)
     widget.connect("drag-data-received", received)
 
@@ -343,7 +361,8 @@ class FileBrowser(Gtk.Box):
     ``on_status`` is an optional callable taking one status string on the GTK thread.
     """
 
-    def __init__(self, profile=None, terminal=None, on_status=None, auto_follow=False, diagnostic_log=None, on_notice=None):
+    def __init__(self, profile=None, terminal=None, on_status=None, auto_follow=False, diagnostic_log=None, on_notice=None,
+                 drag_visibility=None):
         Gtk.Box.__init__(self, orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.set_border_width(14)
         self.get_style_context().add_class("files-panel")
@@ -496,8 +515,8 @@ class FileBrowser(Gtk.Box):
         self.tree.connect("drag-data-get", self._drag_data)
         self.tree.connect("drag-end", self._drag_end)
         self._drag_targets = Gtk.TargetList.new([Gtk.TargetEntry.new("text/uri-list", 0, 0)])
-        bind_file_drop(self.tree, self.upload_paths)
-        bind_file_drop(self, self.upload_paths)
+        bind_file_drop(self.tree, self.upload_paths, drag_visibility)
+        bind_file_drop(self, self.upload_paths, drag_visibility)
         scroll = Gtk.ScrolledWindow()
         scroll.get_style_context().add_class("files-scroll")
         scroll.set_shadow_type(Gtk.ShadowType.NONE)
@@ -1169,6 +1188,9 @@ class FileBrowser(Gtk.Box):
                  ("Обновить", self.refresh)]
         if self._mode == "remote":
             items[1:1] = [("Скачать…", self._download), ("Загрузить…", self._upload)]
+            row = self._selected() if hit else None
+            if row and not row[5] and (row[4] or row[9]):
+                items.insert(4, ("Права…", lambda: self._chmod(row)))
         for label, callback in items:
             item = Gtk.MenuItem(label=label)
             item.connect("activate", lambda unused, cb=callback: cb())
@@ -1181,6 +1203,69 @@ class FileBrowser(Gtk.Box):
         selection = self.tree.get_selection().get_selected()
         if selection[1] is not None:
             self._activated(self.tree, self.model.get_path(selection[1]), None)
+
+    def _chmod(self, row):
+        if self._busy or self._mode != "remote" or self._sftp is None:
+            return
+        sftp, client, generation = self._sftp, self._client, self._generation
+        filename, host = row[6], self.profile.get("host", "")
+
+        def check():
+            if (self._closed or generation != self._generation or sftp is not self._sftp
+                    or self._pending_profile is not None):
+                raise IOError("SSH-подключение изменилось. Откройте права заново.")
+
+        def read():
+            check()
+            return permission_revision(sftp.lstat(filename))
+
+        def edit(revision):
+            try:
+                check()
+            except IOError as exc:
+                self._error(str(exc))
+                return
+            answer = permissions_dialog(self._parent(), row[1], stat.S_IMODE(revision[0]))
+            if answer is None or answer[0] == stat.S_IMODE(revision[0]):
+                return
+            mode, elevate = answer
+
+            def change():
+                if read() != revision:
+                    raise IOError("Объект изменился. Откройте права заново.")
+                if elevate:
+                    if not sudo_chmod(client, filename, mode, revision, ask_password, check):
+                        return False
+                else:
+                    sftp.chmod(filename, mode)
+                if stat.S_IMODE(read()[0]) != mode:
+                    raise IOError("Сервер применил другой режим. Обновите список.")
+                return True
+
+            def ask_password():
+                from .dialogs import name_dialog
+                answered, result = threading.Event(), [None]
+
+                def ask():
+                    try:
+                        check()
+                        result[0] = name_dialog(self._parent(), "Пароль sudo · " + host, secret=True)
+                    except IOError:
+                        pass
+                    finally:
+                        answered.set()
+                    return False
+
+                GLib.idle_add(ask)
+                while not answered.wait(0.2):
+                    check()
+                return result[0]
+
+            self._submit("Изменение прав…", change,
+                         lambda changed: self.refresh() if changed else self._status("Изменение прав отменено."),
+                         kind='permissions')
+
+        self._submit("Чтение прав…", read, edit, kind='permissions')
 
     def _name_dialog(self, title, initial=""):
         from .dialogs import name_dialog

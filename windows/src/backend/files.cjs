@@ -7,6 +7,7 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { TextDecoder } = require('node:util');
 const { permissions, remoteBirthTimes } = require('./file-metadata.cjs');
+const { parseMode, permissionRevision, sudoChmod } = require('./file-permissions.cjs');
 const { directoryReport, resolveTerminalDirectory, REMOTE_HOSTNAME, UNKNOWN_DIRECTORY } = require('./terminal-directory.cjs');
 
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
@@ -127,6 +128,32 @@ class FilesService {
       return path.posix.resolve(home, value);
     }
     return this._directories.get(binding.terminalId) || await this._call(binding, 'realpath', '.');
+  }
+  async permissionDetails(request) {
+    if (request.mode !== 'sftp' || !Number.isInteger(request.generation)) throw new Error('Выберите объект в SFTP.');
+    const binding = await this._binding(request);
+    const filename = await this._path(binding, request.path);
+    const revision = permissionRevision(await this._call(binding, 'lstat', filename));
+    return { mode: revision[0] & 0o7777, revision };
+  }
+  async changePermissions(request, askPassword) {
+    if (request.mode !== 'sftp' || !Number.isInteger(request.generation)) throw new Error('Выберите объект в SFTP.');
+    const mode = parseMode(request.octal);
+    return this._mutation(async () => {
+      const binding = await this._binding(request);
+      const filename = await this._path(binding, request.path);
+      const revision = permissionRevision(await this._call(binding, 'lstat', filename));
+      if (JSON.stringify(revision) !== JSON.stringify(request.revision)) throw new Error('Объект изменился. Откройте права заново.');
+      if ((revision[0] & 0o7777) === mode) return false;
+      if (request.sudo === true) {
+        const check = () => this._assertBinding(binding);
+        const host = this._record(binding.terminalId).profile.host;
+        if (!await sudoChmod(binding.sshClient, filename, mode, revision, () => askPassword(host), check)) return false;
+      } else await this._call(binding, 'chmod', filename, mode);
+      const actual = permissionRevision(await this._call(binding, 'lstat', filename));
+      if ((actual[0] & 0o7777) !== mode) throw new Error('Сервер применил другой режим. Обновите список.');
+      return true;
+    });
   }
   _join(binding, directory, name) { return binding.mode === 'local' ? path.join(directory, name) : path.posix.join(directory, name); }
   _temporary(binding, filename, suffix = 'tmp') {

@@ -67,7 +67,7 @@ notebook > header tab:hover { background: #20262d; color: #c9d3dc; }
 .tab-drop-target, .workspace-tab.tab-drop-target { background: #294238; box-shadow: inset 0 0 0 1px #82d9bd; }
 notebook > header tab:checked { background: #101316; color: #e0e8ed; border-bottom-color: #82d9bd; }
 .workspace-tab button.tab-close { min-width: 17px; min-height: 17px; padding: 1px; }
-.cancel-drop { padding: 1px 6px; border: 1px dashed #343d46; border-radius: 4px; color: #8e9ca8; }
+.cancel-drop { padding: 6px 12px; background: #20262d; border: 1px dashed #83919d; border-radius: 8px; color: #d9e1e8; font-size: 13px; }
 .cancel-drop.tab-drop-target { color: #cde9dc; }
 .toast { padding: 6px 10px; border: 1px solid #3b4b43; border-radius: 8px; background: #25342d; color: #cde9dc; }
 .workspace-tabs > stack { background: #101316; }

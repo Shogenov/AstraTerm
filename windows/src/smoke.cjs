@@ -310,11 +310,18 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
       const generation = terminals.get(first).generation;
       const inputs = fixture.counters.received.length;
       async function drop(bounds, filenames) {
-        const target = await run(`(()=>{const r=${bounds}.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
         const data = { items: [], files: filenames, dragOperationsMask: 1 };
-        for (const type of ['dragEnter', 'dragOver', 'drop']) {
+        const cancel = bounds === "document.getElementById('cancel-drop')";
+        if (cancel) {
+          assert.equal(await run(bounds + ".hidden"), true);
+          await window.webContents.debugger.sendCommand('Input.dispatchDragEvent', { type: 'dragEnter', x: 300, y: 120, data });
+          await until(() => run(bounds + ".getBoundingClientRect().width >= 250"), 'Cancellation target did not appear');
+        }
+        const target = await run(`(()=>{const r=${bounds}.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+        for (const type of cancel ? ['dragOver', 'drop'] : ['dragEnter', 'dragOver', 'drop']) {
           await window.webContents.debugger.sendCommand('Input.dispatchDragEvent', { type, ...target, data });
         }
+        if (cancel) await until(() => run(bounds + ".hidden"), 'Cancellation target remained visible after drop');
       }
       window.webContents.debugger.attach('1.3');
       try {
@@ -381,6 +388,26 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
         await until(() => listed(names[1]), 'Renamed SFTP item not listed');
         assert.equal(fs.existsSync(path.join(fixture.remoteRoot, names[0])), false);
         assert.ok(fs.existsSync(path.join(fixture.remoteRoot, names[1])));
+      }
+    });
+    await check('SFTP context menu applies octal permissions to the selected file', async () => {
+      const { Menu } = require('electron');
+      const popup = Menu.prototype.popup;
+      const filename = path.join(fixture.remoteRoot, 'welcome.txt');
+      let menu;
+      Menu.prototype.popup = function () { menu = this; };
+      try {
+        await run(`document.querySelector('[data-path="/welcome.txt"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,button:2}))`);
+        await until(() => Boolean(menu), 'SFTP context menu missing');
+        menu.items.find(item => item.label === 'Права…').click();
+        await until(() => run(`Boolean(document.querySelector('dialog[open] input[aria-label="Восьмеричный режим"]'))`), 'Permissions dialog missing');
+        await run(`(()=>{const field=document.querySelector('dialog[open] input[aria-label="Восьмеричный режим"]');field.value="444";field.dispatchEvent(new Event("input"));document.querySelector('dialog[open] button.primary').click()})()`);
+        await until(() => (fs.statSync(filename).mode & 0o777) === 0o444, 'SFTP chmod did not change the selected file');
+        await until(() => run(`__astraTest.state.files.entries.some(entry=>entry.path==="/welcome.txt"&&entry.permissions==="r--r--r--")`), 'Permissions column did not refresh');
+      } finally {
+        Menu.prototype.popup = popup;
+        fs.chmodSync(filename, 0o666);
+        await run('__astraTest.loadFiles("/")');
       }
     });
     await check('editor save preserves text typed during an in-flight SFTP write', async () => {

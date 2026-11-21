@@ -21,7 +21,7 @@ from .terminal import TerminalWorkspace
 from .terminal_directory import UNKNOWN_DIRECTORY
 from .floating import FloatingWorkspace
 from .dialogs import SessionDialog, MacroDialog, error, confirm, name_dialog
-from .files import FileBrowser, bind_file_drop
+from .files import FileBrowser, bind_file_drop, watch_file_drag
 from .multiexec import MultiExecController
 from .tiled import TiledTerminals
 from .ssh_profiles import ProfileStore, SSHAgent, verify_terminal_identity
@@ -161,7 +161,7 @@ class MainWindow(Gtk.Window):
         self.workspace_stack.set_visible_child_name("tabs")
         self.content.pack1(self.workspace_stack, True, False)
         self.file_browser = FileBrowser(on_status=self.set_status, on_notice=self.notify, auto_follow=self.auto_sftp,
-                                        diagnostic_log=self.diagnostic_log)
+                                        diagnostic_log=self.diagnostic_log, drag_visibility=self._file_drag_visibility)
         self.file_browser.password_provider = self.credentials.password_for
         self.file_browser.set_size_request(266, -1)
         self.content.pack2(self.file_browser, False, False)
@@ -183,16 +183,28 @@ class MainWindow(Gtk.Window):
         self.connection_info.get_style_context().add_class("muted")
         status.pack_end(self.connection_info, False, False, 6)
         self.cancel_drop = Gtk.EventBox()
-        self.cancel_drop.add(Gtk.Label(label="Отмена перетаскивания"))
+        label = Gtk.Label(label="Отмена перетаскивания")
+        self.cancel_drop.add(label)
+        label.show()
+        self.cancel_drop.set_no_show_all(True)
+        self.cancel_drop.set_halign(Gtk.Align.CENTER)
+        self.cancel_drop.set_valign(Gtk.Align.END)
+        self.cancel_drop.set_margin_bottom(32)
+        self.cancel_drop.set_size_request(270, 52)
+        self._file_drag_hide = None
         self.cancel_drop.get_style_context().add_class("cancel-drop")
         self.cancel_drop.set_tooltip_text("Отпустите здесь вкладку, панель или файл для отмены")
         self.cancel_drop.drag_dest_set(Gtk.DestDefaults(0), self._tab_targets() +
                                        [Gtk.TargetEntry.new("text/uri-list", 0, 0)],
                                        Gdk.DragAction.COPY | Gdk.DragAction.MOVE)
         self.cancel_drop.connect("drag-motion", self._cancel_drag_motion)
-        self.cancel_drop.connect("drag-leave", self._tab_drag_leave)
+        self.cancel_drop.connect("drag-leave", self._cancel_drag_leave)
         self.cancel_drop.connect("drag-drop", self._cancel_drag_drop)
-        status.pack_end(self.cancel_drop, False, False, 6)
+        overlay.add_overlay(self.cancel_drop)
+        self.drag_dest_set(Gtk.DestDefaults.MOTION, [Gtk.TargetEntry.new("text/uri-list", 0, 0)], Gdk.DragAction.COPY)
+        watch_file_drag(self, self._file_drag_visibility)
+        self.file_browser.tree.connect("drag-begin", lambda *_: self._file_drag_visibility(True))
+        self.file_browser.tree.connect("drag-end", lambda *_: self._hide_cancel_drop())
         outer.pack_end(status, False, False, 0)
         self._refresh_sessions()
         if initial_session and not enable_identities:
@@ -353,7 +365,7 @@ class MainWindow(Gtk.Window):
             pane.heading.connect("drag-end", self._tab_drag_end)
             pane.heading.connect("drag-data-get", self._pane_drag_data_get, pane)
             if pane.profile.get("protocol") == "ssh":
-                bind_file_drop(pane.terminal, lambda paths: self._upload_to_pane(pane, paths))
+                bind_file_drop(pane.terminal, lambda paths: self._upload_to_pane(pane, paths), self._file_drag_visibility)
 
     def _upload_to_pane(self, pane, paths):
         generation = pane.connection_generation
@@ -1044,6 +1056,7 @@ class MainWindow(Gtk.Window):
     def _pane_drag_begin(self, widget, context, pane):
         self._dragged_pane = pane
         self._dragged_workspace = None
+        self._file_drag_visibility(True)
 
     def _pane_drag_data_get(self, widget, context, selection, info, timestamp, pane):
         selection.set(selection.get_target(), 8, pane.pane_drag_id.encode("ascii"))
@@ -1051,10 +1064,12 @@ class MainWindow(Gtk.Window):
     def _tab_drag_begin(self, widget, context, workspace):
         self._dragged_workspace = workspace
         self._dragged_pane = None
+        self._file_drag_visibility(True)
 
     def _tab_drag_end(self, *_):
         self._dragged_workspace = None
         self._dragged_pane = None
+        self._hide_cancel_drop()
         self._tab_drag_leave(self.tab_drop_target)
         self._tab_drag_leave(self.tab_strip.labels)
         for index in range(self.notebook.get_n_pages()):
@@ -1074,10 +1089,32 @@ class MainWindow(Gtk.Window):
     def _cancel_drag_motion(self, widget, context, x, y, timestamp):
         if not widget.drag_dest_find_target(context, None):
             return False
+        self._file_drag_visibility(True)
         widget.get_style_context().add_class("tab-drop-target")
         action = Gdk.DragAction.MOVE if self._dragged_workspace or self._dragged_pane else Gdk.DragAction.COPY
         Gdk.drag_status(context, action, timestamp)
         return True
+
+    def _hide_cancel_drop(self):
+        self._tab_drag_leave(self.cancel_drop)
+        self.cancel_drop.hide()
+
+    def _file_drag_visibility(self, visible):
+        if self._file_drag_hide is not None:
+            GLib.source_remove(self._file_drag_hide)
+            self._file_drag_hide = None
+        if visible:
+            self.cancel_drop.show()
+        elif self._dragged_pane is None and self._dragged_workspace is None:
+            def hide():
+                self._file_drag_hide = None
+                self._hide_cancel_drop()
+                return False
+            self._file_drag_hide = GLib.timeout_add(160, hide)
+
+    def _cancel_drag_leave(self, widget, *_):
+        self._tab_drag_leave(widget)
+        self._file_drag_visibility(False)
 
     def _cancel_drag_drop(self, widget, context, x, y, timestamp):
         self._tab_drag_leave(widget)
