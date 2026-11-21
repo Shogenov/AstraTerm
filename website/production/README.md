@@ -2,6 +2,8 @@
 
 `template.html` содержит шаблон главной страницы и ссылку на репозиторий GitHub. `tools/website_build.py` подставляет иллюстрации, сведения о платформах и ссылки скачивания. На `assets/windows-app.png` и `assets/linux-app.png` показаны демонстрационные сессии AstraTerm с тестовыми данными.
 
+`assets/favicon.svg` использует знак терминала и цвета приложения. `assets/github-mark.svg` — белый Invertocat из [официального набора GitHub](https://brand.github.com/foundations/logo).
+
 `python tools/website_build.py` собирает `dist/`. Для финальных ссылок, SHA-256 и разных версий ОС передайте `--metadata` с проверенным открытым payload релиза; при `-Deploy` сборщик делает это сам. Файлы `assets/screenshots.css` и `site.js` добавляют переключение снимков Windows/Linux и сохраняют мобильную компоновку.
 
 Три прежние концепции сборщик копирует под `alternatives/`. Деплой публикует публичный HTML, ресурсы и код панели. Порядок публикации и контракт приложения описаны в [UPDATES.md](../../docs/UPDATES.md).

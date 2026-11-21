@@ -80,6 +80,9 @@ def build(destination=None, payload=None):
     for filename in (SOURCE / 'assets').glob('*'):
         if filename.is_file():
             shutil.copyfile(str(filename), str(destination / 'assets' / filename.name))
+    favicon = 'assets/favicon.svg'
+    favicon_revision = hashlib.sha256((destination / favicon).read_bytes()).hexdigest()[:12]
+    source = source.replace(favicon, favicon + '?v=' + favicon_revision)
     for required in ('windows-app.png', 'linux-app.png', 'screenshots.css', 'site.js'):
         if not (destination / 'assets' / required).is_file():
             raise ValueError('Missing real production asset: ' + required)
