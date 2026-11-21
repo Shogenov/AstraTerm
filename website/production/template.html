@@ -24,9 +24,10 @@
     .logo-mark svg{height:23px;width:23px}
     .navlinks{display:flex;align-items:center;gap:32px;color:#a6b6bd;font-size:14px}
     .navlinks a:hover,.footer a:hover{color:var(--mint)}
-    .nav-download{display:inline-flex;align-items:center;gap:10px;border:1px solid #45624f;color:#dff7e4;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:650;transition:background .2s,border-color .2s}
-    .nav-download:hover{background:#17261e;border-color:var(--mint)}
-    .nav-download svg{width:16px;height:16px}
+    .nav-actions{display:flex;align-items:center;gap:8px}
+    .nav-action{display:inline-flex;align-items:center;gap:10px;border:1px solid #45624f;color:#dff7e4;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:650;white-space:nowrap;transition:background .2s,border-color .2s}
+    .nav-action:hover{background:#17261e;border-color:var(--mint)}
+    .nav-action svg{width:16px;height:16px}
     .hero{position:relative;padding:100px 0 88px;isolation:isolate;overflow:hidden}
     .hero::before{content:"";position:absolute;z-index:-2;inset:0;background:radial-gradient(ellipse 580px 480px at 78% 43%,#1433298a,transparent 75%),radial-gradient(ellipse 480px 380px at -12% 85%,#132b304f,transparent 85%)}
     .hero::after{content:"";position:absolute;z-index:-1;inset:0;opacity:.25;background-image:linear-gradient(#263c401c 1px,transparent 1px),linear-gradient(90deg,#263c401c 1px,transparent 1px);background-size:49px 49px;mask-image:linear-gradient(90deg,transparent 0%,black 75%,transparent 100%)}
@@ -135,7 +136,9 @@
     #notice{position:fixed;z-index:200;right:22px;bottom:22px;max-width:min(440px,calc(100vw - 44px));background:#1b3125;color:#d2f8da;border:1px solid #6cae7c;border-radius:12px;padding:14px 18px;box-shadow:0 10px 35px #0009;font-size:13px;line-height:1.5;opacity:0;transform:translateY(16px);pointer-events:none;transition:opacity .2s,transform .2s}
     #notice.show{opacity:1;transform:translateY(0)}
     @media(max-width:1100px){.hero-grid{gap:24px;grid-template-columns:1fr 1.1fr}.app-body{grid-template-columns:138px 1fr}.sidebar{padding-inline:6px}.server{padding-inline:5px}.term-text{padding:21px 13px;font-size:10px}.features-grid{grid-template-columns:repeat(2,1fr)}.workflow-grid{gap:35px}}
-    @media(max-width:760px){.container{width:min(100% - 36px,600px)}.nav{min-height:69px}.navlinks{display:none}.nav-download{padding:10px 13px}.nav-download .nav-label{display:none}.hero{padding:62px 0 70px}.hero-grid,.workflow-grid{grid-template-columns:1fr}.hero-grid{gap:35px}.hero-description{font-size:16px}.mock-wrap{max-width:600px;margin:auto;width:100%}.app-window{transform:none}.section{padding:76px 0}.workflow-grid{gap:36px}.download-section{padding:80px 0}.platforms{grid-template-columns:1fr;max-width:500px}.platform p{min-height:0}.trust-row{gap:17px}.trust-row div{width:calc(50% - 12px)}.footer-row{align-items:flex-start}.footer-links{width:100%}}
+    @media(max-width:880px){.navlinks{display:none}}
+    @media(max-width:760px){.container{width:min(100% - 36px,600px)}.nav{min-height:69px}.nav-action{padding:10px 13px}.nav-download .nav-label{display:none}.hero{padding:62px 0 70px}.hero-grid,.workflow-grid{grid-template-columns:1fr}.hero-grid{gap:35px}.hero-description{font-size:16px}.mock-wrap{max-width:600px;margin:auto;width:100%}.app-window{transform:none}.section{padding:76px 0}.workflow-grid{gap:36px}.download-section{padding:80px 0}.platforms{grid-template-columns:1fr;max-width:500px}.platform p{min-height:0}.trust-row{gap:17px}.trust-row div{width:calc(50% - 12px)}.footer-row{align-items:flex-start}.footer-links{width:100%}}
+    @media(max-width:430px){.nav{gap:10px}.nav-action{padding-inline:11px}.nav-repository svg{display:none}}
     @media(max-width:430px){h1{font-size:clamp(43px,12vw,56px)}.hero-actions{display:grid;grid-template-columns:1fr 1fr}.hero-actions .btn{padding:12px 9px;gap:5px;font-size:12px}.app-body{grid-template-columns:104px 1fr;min-height:320px}.sidebar{padding-top:12px}.server{font-size:8px;gap:5px}.sidebar-heading{font-size:7px}.term-text{font-size:8px;padding:17px 10px;line-height:2}.tab{font-size:8px;padding:0 7px}.features-grid{grid-template-columns:1fr}.feature{min-height:0}.trust-row div{font-size:10px}.hero-caption{font-size:9px}}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none!important;transition:none!important}}
   </style>
@@ -144,6 +147,7 @@
   <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
     <symbol id="i-logo" viewBox="0 0 24 24"><path d="M12 3 2.8 20h4.1l2-3.8h6.2L17.1 20h4.1L12 3Zm0 7.1 2.1 4.1H9.9L12 10.1Z" fill="currentColor"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 6-6 6 6 6m8-12 6 6-6 6m-3-15-2 18" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 6 6 6-6 6m9 0h7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3 9h18M10 9v11" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
     <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
@@ -156,7 +160,10 @@
     <nav class="container nav" aria-label="Основная навигация">
       <a class="logo" href="#top" aria-label="AstraTerm — главная"><span class="logo-mark"><svg><use href="#i-logo"/></svg></span>AstraTerm</a>
       <div class="navlinks"><a href="#features">Возможности</a><a href="#workflow">Как это работает</a><a href="#download">Скачать</a></div>
-      <a class="nav-download" href="#download"><svg><use href="#i-download"/></svg><span class="nav-label">Скачать AstraTerm</span></a>
+      <div class="nav-actions">
+        <a class="nav-action nav-repository" href="https://github.com/Shogenov/AstraTerm" aria-label="Репозиторий AstraTerm на GitHub"><svg aria-hidden="true"><use href="#i-code"/></svg>GitHub</a>
+        <a class="nav-action nav-download" href="#download" aria-label="Скачать AstraTerm"><svg aria-hidden="true"><use href="#i-download"/></svg><span class="nav-label">Скачать AstraTerm</span></a>
+      </div>
     </nav>
   </header>
   <main id="top">

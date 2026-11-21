@@ -29,7 +29,9 @@ def build(destination=None, payload=None):
             payload['releases'][platform] = item
     source = (SOURCE / 'template.html').read_text(encoding='utf-8')
     styles = re.search(r'<style>(.*?)</style>', source, re.S).group(1)
-    source = re.sub(r'<style>.*?</style>', '<link rel="stylesheet" href="assets/main.css">\n<link rel="stylesheet" href="assets/screenshots.css">', source, count=1, flags=re.S)
+    styles_revision = hashlib.sha256(styles.encode('utf-8')).hexdigest()[:12]
+    styles_link = '<link rel="stylesheet" href="assets/main.css?v={}">'.format(styles_revision)
+    source = re.sub(r'<style>.*?</style>', styles_link + '\n<link rel="stylesheet" href="assets/screenshots.css">', source, count=1, flags=re.S)
     source = re.sub(r'<script>.*?</script>', '<script src="assets/site.js" defer></script>', source, count=1, flags=re.S)
     hero = '''<figure class="mock-wrap real-preview">
       <div class="screenshot-switch" role="group" aria-label="Платформа на скриншоте">
@@ -74,7 +76,7 @@ def build(destination=None, payload=None):
     source = re.sub(r'<p class="release-info">.*?</p>', '<div class="release-info">' + ''.join(release_lines) + '<a href="releases/downloads.json">Все данные релиза и контрольные суммы ↗</a></div>', source, count=1, flags=re.S)
     source = source.replace('<a href="#top">Наверх ↑</a>', '<a href="alternatives/index.html">Другие варианты дизайна</a><a href="#top">Наверх ↑</a>')
     source = source.replace('<meta name="theme-color"', '<link rel="canonical" href="https://astraterminal.ru/">\n  <meta name="theme-color"', 1)
-    (destination / 'assets/main.css').write_text(styles, encoding='utf-8')
+    (destination / 'assets/main.css').write_bytes(styles.encode('utf-8'))
     for filename in (SOURCE / 'assets').glob('*'):
         if filename.is_file():
             shutil.copyfile(str(filename), str(destination / 'assets' / filename.name))
