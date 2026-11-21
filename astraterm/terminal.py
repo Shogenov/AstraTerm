@@ -21,6 +21,8 @@ from .terminal_directory import directory_report
 
 PALETTE = ["#242a30", "#df7d85", "#90bf8f", "#d6bc83", "#8faedb", "#b69dcf", "#85bfc2", "#d9e1e8",
            "#65717d", "#eea0a5", "#add6a1", "#e3cf9f", "#afc8ed", "#ccb5e3", "#a3d5d7", "#f0f3f6"]
+LIGHT_PALETTE = ["#26333e", "#a73145", "#217446", "#785700", "#285aa0", "#794592", "#176b73", "#52616d",
+                 "#60717d", "#ae3b50", "#286c41", "#806312", "#305fa3", "#8a4291", "#16676f", "#465562"]
 
 
 def rgba(value):
@@ -119,8 +121,7 @@ class TerminalPane(Gtk.Box):
         self.terminal.set_encoding(self.profile.get("encoding", "UTF-8"))
         self.terminal.set_rewrap_on_resize(True)
         self.terminal.set_allow_hyperlink(True) if hasattr(self.terminal, "set_allow_hyperlink") else None
-        self.terminal.set_colors(rgba("#d9e1e8"), rgba("#101316"), [rgba(x) for x in PALETTE])
-        self.terminal.set_color_cursor(rgba("#82d9bd"))
+        self.set_theme('dark')
         self.set_font_size(font_size)
         body.pack_start(self.terminal, True, True, 0)
         body.pack_end(Gtk.Scrollbar(orientation=Gtk.Orientation.VERTICAL,
@@ -373,6 +374,13 @@ class TerminalPane(Gtk.Box):
     def set_font_size(self, size):
         self.font_size = max(7, min(28, size))
         self.terminal.set_font(Pango.FontDescription("DejaVu Sans Mono {}".format(self.font_size)))
+
+    def set_theme(self, theme):
+        light = theme == 'light'
+        colors = LIGHT_PALETTE if light else PALETTE
+        self.terminal.set_colors(rgba("#21303a" if light else "#d9e1e8"),
+                                 rgba("#ffffff" if light else "#101316"), [rgba(color) for color in colors])
+        self.terminal.set_color_cursor(rgba("#246752" if light else "#82d9bd"))
 
     def save_output(self, path=None):
         if path is None:

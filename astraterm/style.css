@@ -70,6 +70,9 @@ notebook > header tab:checked { background: #101316; color: #e0e8ed; border-bott
 .cancel-drop { padding: 6px 12px; background: #20262d; border: 1px dashed #83919d; border-radius: 8px; color: #d9e1e8; font-size: 13px; }
 .cancel-drop.tab-drop-target { color: #cde9dc; }
 .toast { padding: 6px 10px; border: 1px solid #3b4b43; border-radius: 8px; background: #25342d; color: #cde9dc; }
+.upload-notice { padding: 8px 10px; background: #20262d; color: #d9e1e8; border: 1px solid #52616c; border-radius: 8px; }
+.upload-notice progressbar trough { background: #52616c; min-height: 5px; }
+.upload-notice progressbar progress { background: #82d9bd; min-height: 5px; }
 .workspace-tabs > stack { background: #101316; }
 .terminal-pane, .terminal-body, .terminal-surface, .tiled-terminals { background: #101316; }
 .terminal-body { padding: 7px 0 7px 10px; }

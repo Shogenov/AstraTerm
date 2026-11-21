@@ -174,7 +174,13 @@ function captureProfile(directory, documentsDirectory) {
     record.key_file = KEY_REF + id;
     byPath.set(filename, record.key_file);
   }
-  return { documents, keys, missing };
+  const payload = { documents, keys, missing };
+  const appearance = read(path.join(directory, 'appearance.json'), MAX_DOCUMENT, true);
+  if (appearance !== null) {
+    const theme = JSON.parse(decoder.decode(appearance))?.theme;
+    if (['dark', 'light'].includes(theme)) payload.theme = theme;
+  }
+  return payload;
 }
 
 function validatePayload(payload) {
@@ -194,7 +200,12 @@ function validatePayload(payload) {
     const refs = new Set(holders(documents).map(record => record.key_file)
       .filter(value => value?.startsWith(KEY_REF)).map(value => value.slice(KEY_REF.length)));
     if (refs.size !== Object.keys(keys).length || [...refs].some(id => !Object.hasOwn(keys, id))) throw Error();
-    return { documents, keys, missing };
+    const checked = { documents, keys, missing };
+    if (Object.hasOwn(payload, 'theme')) {
+      if (!['dark', 'light'].includes(payload.theme)) throw Error();
+      checked.theme = payload.theme;
+    }
+    return checked;
   } catch { throw Error(INVALID); }
 }
 
@@ -254,7 +265,7 @@ async function readBackup(filename, password) {
 }
 
 async function restoreProfile(root, previous, payload) {
-  const { documents, keys } = validatePayload(payload);
+  const { documents, keys, theme } = validatePayload(payload);
   root = path.resolve(root);
   const parent = path.join(root, PROFILES);
   fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
@@ -285,6 +296,7 @@ async function restoreProfile(root, previous, payload) {
       if (bytes.length > MAX_DOCUMENT) throw Error('Восстановленные настройки превышают допустимый размер.');
       writeNew(path.join(directory, name), bytes);
     }
+    if (theme) writeNew(path.join(directory, 'appearance.json'), jsonBytes({ theme }));
     // Electron's main process is the only writer. Keep the check and switch synchronous.
     if (activeProfile(root) !== previous) throw Error('Активный профиль изменился. Перезапустите AstraTerm и повторите восстановление.');
     writeNew(temporary, jsonBytes({ directory: id }));

@@ -218,6 +218,11 @@
           aria-label="Файлы"
         ></div>
         <p id="file-status" class="file-status"></p>
+        <aside id="upload-notice" class="upload-notice" hidden aria-label="Загрузка по SFTP">
+          <strong id="upload-title"></strong>
+          <progress id="upload-bar" aria-label="Ход передачи файла" max="100" value="0"></progress>
+          <span id="upload-metrics"></span>
+        </aside>
       </aside>
     </main>
     <footer>

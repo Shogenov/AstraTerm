@@ -12,6 +12,11 @@ module.exports = {
     "terminal-cwd"
   ],
   "maximum_files": 100,
+  "upload_progress": {
+    "bytes": 65536,
+    "before_commit": 99,
+    "completed": 100
+  },
   "destination": {
     "terminal": "working-directory-reported-by-shell",
     "panel": "visible-sftp-directory"

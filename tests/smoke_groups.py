@@ -305,7 +305,8 @@ def main():
                               if isinstance(item, Gtk.Dialog) and item.get_title() == 'Настройки')
                 controls = dialog.get_content_area().get_children()
                 next(item for item in controls if isinstance(item, Gtk.CheckButton)).set_active(True)
-                next(item for item in controls if isinstance(item, Gtk.ComboBoxText)).set_active_id('debug')
+                next(item for item in controls if isinstance(item, Gtk.ComboBoxText) and
+                     item.get_active_id() in ('error', 'warning', 'info', 'debug')).set_active_id('debug')
                 dialog.response(Gtk.ResponseType.OK)
                 return False
             GLib.idle_add(set_logging)

@@ -151,7 +151,11 @@ async function createFixture(directory, options = {}) {
           on('FSETSTAT', (request, handle, attributes) => {
             if (attributes.mode !== undefined) fs.fchmod(entry(handle).fd, attributes.mode, error => reply(request, error)); else reply(request);
           });
-          on('RENAME', (request, source, target) => fs.rename(local(source), local(target), error => reply(request, error)));
+          on('RENAME', (request, source, target) => {
+            const rename = () => fs.rename(local(source), local(target), error => reply(request, error));
+            if (counters.renameDelayMs) setTimeout(rename, counters.renameDelayMs);
+            else rename();
+          });
           on('REMOVE', (request, remote) => fs.unlink(local(remote), error => reply(request, error)));
           on('MKDIR', (request, remote) => fs.mkdir(local(remote), error => reply(request, error)));
           on('RMDIR', (request, remote) => fs.rmdir(local(remote), error => reply(request, error)));

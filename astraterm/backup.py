@@ -173,7 +173,13 @@ def capture_profile(directory):
                 raise ValueError('Резервная копия превышает допустимый размер или число SSH-ключей.')
             keys[identifier] = parts
         record['key_file'] = by_path[filename] = KEY_REF + identifier
-    return {'documents': documents, 'keys': keys, 'missing': missing}
+    payload = {'documents': documents, 'keys': keys, 'missing': missing}
+    raw = _read(os.path.join(directory, 'appearance.json'), MAX_DOCUMENT, optional=True)
+    if raw is not None:
+        appearance = json.loads(raw.decode('utf-8-sig'))
+        if isinstance(appearance, dict) and appearance.get('theme') in ('dark', 'light'):
+            payload['theme'] = appearance['theme']
+    return payload
 
 
 def _validate_payload(payload):
@@ -196,7 +202,12 @@ def _validate_payload(payload):
                       if item.get('key_file', '').startswith(KEY_REF)}
         if set(keys) != references:
             raise ValueError()
-        return {'documents': documents, 'keys': keys, 'missing': missing}
+        checked = {'documents': documents, 'keys': keys, 'missing': missing}
+        if 'theme' in payload:
+            if payload['theme'] not in ('dark', 'light'):
+                raise ValueError()
+            checked['theme'] = payload['theme']
+        return checked
     except (KeyError, ValueError, TypeError):
         raise ValueError(INVALID) from None
 
@@ -282,6 +293,8 @@ def restore_profile(root, previous, payload):
             if len(data) > MAX_DOCUMENT:
                 raise ValueError('Восстановленные настройки превышают допустимый размер.')
             _write_new(os.path.join(directory, name), data)
+        if 'theme' in payload:
+            _write_new(os.path.join(directory, 'appearance.json'), _json_bytes({'theme': payload['theme']}))
 
         marker = os.path.join(root, MARKER)
         with _config_lock(marker):

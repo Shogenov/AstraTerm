@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk
+from gi.repository import Gtk, Gdk, GLib
 
 from astraterm.app import MainWindow
 from astraterm.core import SessionStore, default_session
@@ -159,6 +159,32 @@ def check_terminal_viewport(window, pane):
         pump(.2)
 
 
+def check_theme(window, panes):
+    assert window.theme == 'dark'
+    processes = [pane.pid for pane in panes]
+    for theme, minimum, maximum in (('light', .9, 1), ('dark', 0, .25)):
+        def choose_theme():
+            dialogs = [item for item in Gtk.Window.list_toplevels()
+                       if isinstance(item, Gtk.Dialog) and item.get_title() == 'Настройки']
+            if not dialogs:
+                return True
+            dialog = dialogs[0]
+            combo = next(item for item in dialog.get_content_area().get_children()
+                         if isinstance(item, Gtk.ComboBoxText) and item.get_active_id() in ('light', 'dark'))
+            combo.set_active_id(theme)
+            dialog.response(Gtk.ResponseType.OK)
+            return False
+
+        GLib.timeout_add(80, choose_theme)
+        window.settings()
+        pump(.2)
+        color = window.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
+        assert minimum <= color.red <= maximum, color
+        with open(window.appearance_path, encoding='utf-8') as stream:
+            assert json.load(stream) == {'theme': theme}
+        assert window.theme == theme and [pane.pid for pane in panes] == processes
+
+
 def check_menu(window):
     button = window.main_menu_button
     menu = window.main_menu
@@ -292,6 +318,8 @@ def main():
             print("PASS visible positive recipients / two selected / pause / original headings and PTYs restored", flush=True)
             check_terminal_viewport(window, panes[0])
             print("PASS complete VTE rows above the status bar after resize and font changes", flush=True)
+            check_theme(window, panes)
+            print("PASS dark default and live theme changes with persistent preferences", flush=True)
             print("DESIGN_SMOKE_OK", flush=True)
         finally:
             if window is not None:

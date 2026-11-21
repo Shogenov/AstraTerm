@@ -11,7 +11,6 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from unittest import mock
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import paramiko
 import gi
@@ -69,8 +68,13 @@ class SFTP(paramiko.SFTPServerInterface):
     def rename(self, oldpath, newpath):
         if oldpath not in self.entries or newpath in self.entries:
             return paramiko.SFTP_FAILURE
+        if oldpath.startswith('/.astraterm-upload-'):
+            time.sleep(.7)
         self.entries[newpath] = self.entries.pop(oldpath)
         return paramiko.SFTP_OK
+
+    def remove(self, path):
+        return paramiko.SFTP_OK if self.entries.pop(path, None) is not None else paramiko.SFTP_NO_SUCH_FILE
 
     def chattr(self, path, attr):
         if path not in self.entries or attr.st_mode is None:
@@ -80,6 +84,16 @@ class SFTP(paramiko.SFTPServerInterface):
         return paramiko.SFTP_OK
 
     def open(self, path, flags, attr):
+        if path.startswith('/.astraterm-upload-') and flags & os.O_WRONLY:
+            handle = paramiko.SFTPHandle(flags)
+            handle.writefile = io.BytesIO()
+
+            def close():
+                self.entries[path] = (0o100600, len(handle.writefile.getvalue()))
+                paramiko.SFTPHandle.close(handle)
+
+            handle.close = close
+            return handle
         if path != '/fixture.txt' or flags & (os.O_WRONLY | os.O_RDWR):
             return paramiko.SFTP_PERMISSION_DENIED
         handle = paramiko.SFTPHandle(flags)
@@ -198,6 +212,20 @@ def main():
             assert fixture.password not in str(pane.profile)
             check_drag_export(window.file_browser, root/'local-copy.txt')
             browser = window.file_browser
+            contract_path = Path(__file__).resolve().parents[1] / 'shared/contracts/file-drops.json'
+            progress = json.loads(contract_path.read_text(encoding='utf-8'))['upload_progress']
+            source = root / 'test-upload.bin'
+            source.write_bytes(b'x' * progress['bytes'])
+            browser.upload_paths([str(source)])
+            wait_for(lambda: browser._upload_notice.get_mapped() and
+                     browser._upload_bar.get_fraction() == progress['before_commit'] / 100,
+                     'SFTP notice shows progress before commit')
+            assert '64.0 КБ / 64.0 КБ' in browser._upload_metrics.get_text()
+            assert browser._upload_metrics.get_text().endswith('/с')
+            wait_for(lambda: browser._upload_bar.get_fraction() == progress['completed'] / 100,
+                     'SFTP notice shows 100% after commit')
+            wait_for(lambda: any(item[1] == source.name for item in browser.model), 'uploaded file listed')
+            print('PASS SFTP upload notice shows size, rate and commit status', flush=True)
             shortcuts = KEYBOARD["rename"]
             browser._sftp.rename("/z-small.txt", "/" + shortcuts["file"][0])
             browser._sftp.mkdir("/" + shortcuts["directory"][0])
@@ -211,11 +239,34 @@ def main():
                 wait_for(lambda: any(row[1] == names[1] for row in browser.model), "SFTP F2 rename applied")
             print("PASS F2 renames SFTP file and directory", flush=True)
             row = next(tuple(item) for item in browser.model if item[1] == 'fixture.txt')
-            with mock.patch('astraterm.files.permissions_dialog', return_value=(0o644, False)) as permissions:
+            separate_row = []
+
+            def change_mode():
+                dialog = next((item for item in Gtk.Window.list_toplevels()
+                               if isinstance(item, Gtk.Dialog) and item.get_title() == 'Права · fixture.txt'), None)
+                if dialog is None:
+                    return True
+                try:
+                    controls = dialog.get_content_area().get_children()
+                    grid = next(item for item in controls if isinstance(item, Gtk.Grid))
+                    sudo = next(item for item in controls if isinstance(item, Gtk.CheckButton))
+                    grid_bounds = grid.get_allocation()
+                    separate_row.append(sudo.get_allocation().y >= grid_bounds.y + grid_bounds.height)
+                    field = next(item for item in grid.get_children() if isinstance(item, Gtk.Entry))
+                    field.set_text('644')
+                finally:
+                    dialog.response(Gtk.ResponseType.OK)
+                return False
+
+            timer = GLib.timeout_add(80, change_mode)
+            try:
                 browser._chmod(row)
                 wait_for(lambda: any(item[1] == 'fixture.txt' and item[7] == 'rw-r--r--' for item in browser.model),
                          'SFTP chmod and permissions refresh')
-                assert permissions.call_args[0][1:] == ('fixture.txt', 0o640)
+                assert separate_row == [True]
+            finally:
+                if not separate_row:
+                    GLib.source_remove(timer)
             print("PASS SFTP permissions editor applies mode and refreshes metadata", flush=True)
             recording=root/'import-recording.log'
             recorded_profile=dict(profile,_recording_path=str(recording))

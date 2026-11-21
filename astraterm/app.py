@@ -72,6 +72,14 @@ class MainWindow(Gtk.Window):
         self.set_icon_name("utilities-terminal")
         self.store = store or SessionStore()
         directory = os.path.dirname(self.store.path)
+        self.appearance_path = os.path.join(directory, 'appearance.json')
+        self.theme = 'dark'
+        try:
+            with open(self.appearance_path, encoding='utf-8') as stream:
+                if json.load(stream).get('theme') == 'light':
+                    self.theme = 'light'
+        except (OSError, ValueError, AttributeError):
+            pass
         self.diagnostic_log = DiagnosticLog(os.path.dirname(self.store.path))
         self.diagnostic_log.write('info', 'app.start')
         self._sidebar_path = os.path.join(os.path.dirname(self.store.path), 'sidebar.json')
@@ -103,7 +111,10 @@ class MainWindow(Gtk.Window):
         self.multiexec = MultiExecController(on_change=self._multiexec_changed,
                                              on_error=self._multiexec_error)
         self.file_profile_id = None
+        self._style_provider = Gtk.CssProvider()
         self._load_style()
+        Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), self._style_provider,
+                                                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.connect("delete-event", self._delete_event)
         self.connect("key-press-event", self._key_press)
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -217,11 +228,27 @@ class MainWindow(Gtk.Window):
             GLib.timeout_add_seconds(15, lambda: self.updates.check(automatic=True))
 
     def _load_style(self):
-        Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", True)
-        provider = Gtk.CssProvider()
-        provider.load_from_path(os.path.join(os.path.dirname(__file__), "style.css"))
-        Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider,
-                                                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        style_dir = os.path.dirname(__file__)
+        with open(os.path.join(style_dir, 'style.css'), 'rb') as stream:
+            styles = stream.read()
+        if self.theme == 'light':
+            with open(os.path.join(style_dir, 'style-light.css'), 'rb') as stream:
+                styles += b'\n' + stream.read()
+        Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", self.theme == 'dark')
+        self._style_provider.load_from_data(styles)
+
+    def _set_theme(self, theme):
+        if theme not in ('dark', 'light'):
+            raise ValueError('Неизвестная тема оформления.')
+        if theme == self.theme:
+            return
+        with _config_lock(self.appearance_path):
+            _atomic_json(self.appearance_path, {'theme': theme})
+        self.theme = theme
+        self._load_style()
+        for pane in self.all_panes():
+            if hasattr(pane, 'set_theme'):
+                pane.set_theme(theme)
 
     def _menu(self):
         bar = Gtk.Menu()
@@ -356,6 +383,8 @@ class MainWindow(Gtk.Window):
 
     def _register_pane(self, pane):
         pane.on_reconnect=lambda current:self.reconnect_pane(current)
+        if hasattr(pane, 'set_theme'):
+            pane.set_theme(self.theme)
         self.multiexec.register(pane)
         if not hasattr(pane, "pane_drag_id"):
             pane.pane_drag_id = uuid.uuid4().hex
@@ -1885,6 +1914,12 @@ class MainWindow(Gtk.Window):
         box = dialog.get_content_area()
         box.set_border_width(16)
         box.set_spacing(10)
+        theme = Gtk.ComboBoxText()
+        theme.append('dark', 'Тёмная')
+        theme.append('light', 'Светлая')
+        theme.set_active_id(self.theme)
+        box.add(Gtk.Label(label='Тема оформления', xalign=0))
+        box.add(theme)
         enabled = Gtk.CheckButton(label='Записывать диагностический журнал', active=diagnostic_log.enabled)
         levels = Gtk.ComboBoxText()
         for key, title in (('error', 'Ошибки'), ('warning', 'Предупреждения'), ('info', 'Информация'), ('debug', 'Отладка')):
@@ -1902,11 +1937,12 @@ class MainWindow(Gtk.Window):
         while dialog.run() == Gtk.ResponseType.OK:
             try:
                 diagnostic_log.configure(enabled.get_active(), levels.get_active_id())
+                self._set_theme(theme.get_active_id())
                 diagnostic_log.write('info', 'logging.configured')
-                self.notify('Настройки журнала сохранены')
+                self.notify('Настройки сохранены')
                 break
             except (OSError, ValueError):
-                error(dialog, 'Не удалось сохранить настройки журнала')
+                error(dialog, 'Не удалось сохранить настройки')
         dialog.destroy()
 
     def diagnostics(self, *_):
@@ -2063,6 +2099,7 @@ class MainWindow(Gtk.Window):
         if self.tiled.active:
             self.tiled.leave()
         self.file_browser.shutdown()
+        Gtk.StyleContext.remove_provider_for_screen(Gdk.Screen.get_default(), self._style_provider)
         for i in range(self.notebook.get_n_pages()):
             self.notebook.get_nth_page(i).close()
 

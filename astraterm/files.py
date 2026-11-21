@@ -391,6 +391,8 @@ class FileBrowser(Gtk.Box):
         self._pending_profile = None
         self._pending_auth_generation = None
         self._pending_upload = None
+        self._upload_notice_token = None
+        self._upload_notice_timer = None
         self.auto_follow = bool(auto_follow)
         self._auth_generation = None
         self._follow_source = None
@@ -522,7 +524,22 @@ class FileBrowser(Gtk.Box):
         scroll.set_shadow_type(Gtk.ShadowType.NONE)
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll.add(self.tree)
-        self.pack_start(scroll, True, True, 0)
+        file_area = Gtk.Overlay()
+        file_area.add(scroll)
+        self._upload_notice = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5,
+                                     halign=Gtk.Align.FILL, valign=Gtk.Align.END,
+                                     margin_start=6, margin_end=6, margin_bottom=7)
+        self._upload_notice.set_no_show_all(True)
+        self._upload_notice.get_style_context().add_class('upload-notice')
+        self._upload_title = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE, max_width_chars=24)
+        self._upload_bar = Gtk.ProgressBar()
+        self._upload_metrics = Gtk.Label(xalign=0, wrap=True, max_width_chars=24)
+        for widget in (self._upload_title, self._upload_bar, self._upload_metrics):
+            self._upload_notice.pack_start(widget, False, False, 0)
+            widget.show()
+        file_area.add_overlay(self._upload_notice)
+        file_area.set_overlay_pass_through(self._upload_notice, True)
+        self.pack_start(file_area, True, True, 0)
 
         self.status_label = Gtk.Label(label="Двойной щелчок: открыть каталог или текстовый файл")
         self.status_label.set_xalign(0)
@@ -759,6 +776,9 @@ class FileBrowser(Gtk.Box):
 
     def _release_connection(self, cache=False):
         self._generation += 1
+        if self._upload_notice_token is not None:
+            self._upload_notice_token = None
+            self._hide_upload_notice()
         self._pending_upload = None
         self._busy = False
         self._operation_kind = None
@@ -828,6 +848,7 @@ class FileBrowser(Gtk.Box):
         """Stop callbacks, release sockets, and unblock any host-key wait."""
         self._closed = True
         self._disconnect()
+        self._hide_upload_notice()
         for source in self._drag_timers:
             GLib.source_remove(source)
         self._drag_timers.clear()
@@ -1350,6 +1371,39 @@ class FileBrowser(Gtk.Box):
             self._progress_time = now
             GLib.idle_add(self._status, "Передано %s / %s" % (_size(transferred), _size(total)))
 
+    def _hide_upload_notice(self):
+        if self._upload_notice_timer is not None:
+            GLib.source_remove(self._upload_notice_timer)
+            self._upload_notice_timer = None
+        self._upload_notice.hide()
+
+    def _show_upload_progress(self, token, title, transferred, total, speed, finished=False):
+        if self._closed or self._upload_notice_token is not token:
+            return False
+        fraction = min(1.0, transferred / total) if total else float(finished)
+        percent = int(fraction * 100) if finished else min(99, int(fraction * 100))
+        self._upload_title.set_text(title)
+        self._upload_bar.set_fraction(percent / 100)
+        self._upload_metrics.set_text("{} % · {} / {} · {}/с".format(
+            percent, _size(transferred), _size(total), _size(speed)))
+        self._upload_notice.show()
+        return False
+
+    def _finish_upload_notice(self, token, uploaded):
+        if self._upload_notice_token is not token:
+            return
+        self._upload_notice_token = None
+        if not uploaded:
+            self._hide_upload_notice()
+            return
+
+        def hide():
+            self._upload_notice_timer = None
+            self._hide_upload_notice()
+            return False
+
+        self._upload_notice_timer = GLib.timeout_add(2500, hide)
+
     @staticmethod
     def _remote_stat(sftp, path):
         try:
@@ -1453,6 +1507,8 @@ class FileBrowser(Gtk.Box):
         sftp, directory = self._sftp, directory or self._remote_path or self._remote_home
         generation = self._generation
         host, user, home = self.profile.get("host", ""), self.profile.get("username"), self._remote_home
+        self._hide_upload_notice()
+        notice = self._upload_notice_token = object()
 
         def check_binding():
             if self._closed or generation != self._generation or (terminal_check and not terminal_check()):
@@ -1495,8 +1551,23 @@ class FileBrowser(Gtk.Box):
                         continue
                 check_binding()
                 temporary = posixpath.join(target_directory, ".astraterm-upload-" + uuid.uuid4().hex)
+                name = os.path.basename(source)
+                title = name + (" · " + host if host else "")
+                start = time.monotonic()
+                last = [start]
+                total = before.st_size
+                GLib.idle_add(self._show_upload_progress, notice, title, 0, total, 0)
+
+                def progress(transferred, _total):
+                    now = time.monotonic()
+                    if now - last[0] >= 0.2 or transferred >= total:
+                        last[0] = now
+                        speed = transferred / max(now - start, 0.001)
+                        GLib.idle_add(self._show_upload_progress, notice, title, min(transferred, total), total, speed)
+
                 try:
-                    sftp.put(source, temporary, callback=self._progress)
+                    sftp.put(source, temporary, callback=progress)
+                    speed = total / max(time.monotonic() - start, 0.001)
                     check_binding()
                     if not stat.S_ISREG(os.lstat(source).st_mode) or _snapshot(source) != source_revision:
                         raise IOError("Исходный файл изменился во время передачи.")
@@ -1507,6 +1578,7 @@ class FileBrowser(Gtk.Box):
                         raise IOError("Файл назначения изменился во время передачи.")
                     self._remote_replace(sftp, temporary, target, original)
                     uploaded += 1
+                    GLib.idle_add(self._show_upload_progress, notice, "Загружено · " + title, total, total, speed, True)
                 finally:
                     try:
                         sftp.remove(temporary)
@@ -1519,10 +1591,12 @@ class FileBrowser(Gtk.Box):
                 self.refresh()
 
         def upload_failed(error):
+            self._finish_upload_notice(notice, False)
             self._error(str(error))
             refresh_upload()
 
         def upload_complete(uploaded):
+            self._finish_upload_notice(notice, bool(uploaded))
             if uploaded and self.on_notice:
                 self.on_notice("Загружено файлов: {}".format(uploaded))
             refresh_upload()

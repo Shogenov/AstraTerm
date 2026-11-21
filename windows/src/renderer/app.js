@@ -62,6 +62,7 @@ function iconButton(name, title, callback) {
   );
 }
 const state = {
+  theme: "dark",
   store: { sessions: [], groups: [], macros: [], tunnels: [] },
   identities: { profiles: [], keys: [] },
   panes: new Map(),
@@ -135,9 +136,12 @@ function profileIcon(profile) {
 }
 function niceSize(size) {
   if (size == null) return "—";
-  if (size < 1024) return size + " Б";
-  if (size < 1048576) return (size / 1024).toFixed(1) + " КБ";
-  return (size / 1048576).toFixed(1) + " МБ";
+  if (size < 1024) return Math.floor(size) + " Б";
+  const units = ["КБ", "МБ", "ГБ", "ТБ"];
+  for (const unit of units) {
+    size /= 1024;
+    if (size < 1024 || unit === "ТБ") return size.toFixed(1) + " " + unit;
+  }
 }
 const fileDate = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" });
 function displayFileDate(value) {
@@ -804,6 +808,30 @@ function bindRangeSelection(pane) {
   }, true);
 }
 
+function terminalTheme(theme) {
+  if (theme === "light") return {
+    background: "#ffffff", foreground: "#21303a", cursor: "#246752", selectionBackground: "#cce8dc",
+    black: "#26333e", red: "#a73145", green: "#217446", yellow: "#785700",
+    blue: "#285aa0", magenta: "#794592", cyan: "#176b73", white: "#52616d",
+    brightBlack: "#60717d", brightRed: "#ae3b50", brightGreen: "#286c41", brightYellow: "#806312",
+    brightBlue: "#305fa3", brightMagenta: "#8a4291", brightCyan: "#16676f", brightWhite: "#465562",
+  };
+  return {
+    background: "#101316", foreground: "#d9e1e8", cursor: "#82d9bd", selectionBackground: "#335448",
+    black: "#242a30", red: "#df7d85", green: "#90bf8f", yellow: "#d6bc83",
+    blue: "#8faedb", magenta: "#b69dcf", cyan: "#85bfc2", white: "#d9e1e8",
+    brightBlack: "#65717d", brightRed: "#eea0a5", brightGreen: "#add6a1", brightYellow: "#e3cf9f",
+    brightBlue: "#afc8ed", brightMagenta: "#ccb5e3", brightCyan: "#a3d5d7", brightWhite: "#f0f3f6",
+  };
+}
+
+function setTheme(theme) {
+  state.theme = theme;
+  for (const pane of state.panes.values()) {
+    if (pane.term) pane.term.options.theme = terminalTheme(theme);
+  }
+}
+
 function addPane(record) {
   if (state.panes.has(record.id)) return state.panes.get(record.id);
   if (record.profile.protocol === "rdp") return addRdpPane(record);
@@ -829,28 +857,7 @@ function addPane(record) {
     scrollback: 20000,
     allowProposedApi: false,
     convertEol: false,
-    theme: {
-      background: "#101316",
-      foreground: "#d9e1e8",
-      cursor: "#82d9bd",
-      selectionBackground: "#335448",
-      black: "#242a30",
-      red: "#df7d85",
-      green: "#90bf8f",
-      yellow: "#d6bc83",
-      blue: "#8faedb",
-      magenta: "#b69dcf",
-      cyan: "#85bfc2",
-      white: "#d9e1e8",
-      brightBlack: "#65717d",
-      brightRed: "#eea0a5",
-      brightGreen: "#add6a1",
-      brightYellow: "#e3cf9f",
-      brightBlue: "#afc8ed",
-      brightMagenta: "#ccb5e3",
-      brightCyan: "#a3d5d7",
-      brightWhite: "#f0f3f6",
-    },
+    theme: terminalTheme(state.theme),
   });
   const fit = new FitAddon.FitAddon();
   const search = new SearchAddon.SearchAddon();
@@ -1380,6 +1387,25 @@ function fileWarning(result) {
     );
 }
 
+let uploadNoticeId;
+let uploadNoticeTimer;
+function renderUploadProgress({ id, phase, name, host, transferred, total, rate }) {
+  const notice = $("upload-notice");
+  if (phase === "failed") {
+    if (uploadNoticeId === id) notice.hidden = true;
+    return;
+  }
+  clearTimeout(uploadNoticeTimer);
+  uploadNoticeId = id;
+  const completed = phase === "completed";
+  const percent = completed ? 100 : Math.min(99, total ? Math.floor(transferred / total * 100) : 0);
+  $("upload-title").textContent = (completed ? "Загружено · " : "") + name + (host ? " · " + host : "");
+  $("upload-bar").value = percent;
+  $("upload-metrics").textContent = `${percent} % · ${niceSize(transferred)} / ${niceSize(total)} · ${niceSize(rate)}/с`;
+  notice.hidden = false;
+  if (completed) uploadNoticeTimer = setTimeout(() => { notice.hidden = true; }, 2500);
+}
+
 function bindFileDrop(widget, terminalId, onTerminal = false) {
   const hasFiles = event => event.dataTransfer?.types.includes("Files");
   widget.addEventListener("dragover", event => {
@@ -1540,8 +1566,10 @@ async function editFilePermissions({ entry, binding }) {
     render();
   }
   octal.addEventListener("input", render);
-  dialog.body.append(grid, el("label", {}, "Восьмеричный режим ", octal), symbolic,
-    el("label", { class: "check" }, sudo, "Выполнить через sudo, если у вас есть права sudo"));
+  const modeLine = el("div", { class: "permission-mode" },
+    el("label", {}, "Восьмеричный режим", octal), symbolic);
+  dialog.body.append(grid, modeLine,
+    el("label", { class: "permission-sudo" }, sudo, "Выполнить через sudo, если у вас есть права sudo"));
   dialog.footer.append(el("button", { text: "Отмена", onclick: dialog.close }), apply);
   render();
   dialog.show();
@@ -2869,6 +2897,9 @@ async function about(diagnostics = false) {
 async function settingsDialog() {
   const current = await api.invoke("logging:settings");
   const dialog = formDialog("Настройки", false);
+  const theme = dialog.add("theme", "Тема оформления", state.theme, { full: true, choices: [
+    { value: "dark", label: "Тёмная" }, { value: "light", label: "Светлая" },
+  ] });
   const toggle = checkbox("Записывать диагностический журнал", current.enabled);
   toggle.wrapper.classList.add("full");
   dialog.grid.append(toggle.wrapper);
@@ -2881,7 +2912,8 @@ async function settingsDialog() {
   dialog.body.prepend(el("p", { class: "dialog-description", text: current.filename }));
   dialog.submit(async () => {
     await api.invoke("logging:save", { enabled: toggle.input.checked, level: level.value });
-    toast("Настройки журнала сохранены");
+    if (theme.value !== state.theme) setTheme(await api.invoke("app:theme", { theme: theme.value }));
+    toast("Настройки сохранены");
   });
   dialog.show();
 }
@@ -3119,6 +3151,10 @@ function renderUpdateProgress(value) {
 
 function handleEvent(event) {
   const { type, payload } = event;
+  if (type === "files:upload-progress") {
+    renderUploadProgress(payload);
+    return;
+  }
   if (type === "update:progress") {
     renderUpdateProgress(payload);
     return;
@@ -3402,6 +3438,7 @@ async function boot() {
   api.onEvent(handleEvent);
   const initial = await api.invoke("bootstrap");
   state.bootstrap = initial;
+  setTheme(initial.theme === "light" ? "light" : "dark");
   state.store = initial.store;
   state.identities = initial.identities;
   state.vault = initial.vault;

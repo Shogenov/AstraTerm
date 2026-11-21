@@ -2,6 +2,7 @@
   "files": ["Перетаскивание A.txt", "drop-B.txt", "drop-C.txt"],
   "directories": ["drop-a", "drop-b", "terminal-cwd"],
   "maximum_files": 100,
+  "upload_progress": {"bytes": 65536, "before_commit": 99, "completed": 100},
   "destination": {"terminal": "working-directory-reported-by-shell", "panel": "visible-sftp-directory"},
   "unknown_terminal_directory": "reject",
   "directory_reports": [

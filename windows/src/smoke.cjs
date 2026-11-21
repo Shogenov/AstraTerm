@@ -74,6 +74,21 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
       assert.match(fs.readFileSync(logging.filename, 'utf8'), /logging\.configured/);
       await run('astra.invoke("logging:save",{enabled:false,level:"debug"})');
     });
+    await check('theme defaults to dark and updates live terminals and profile settings', async () => {
+      const themeFile = path.join(await run('__astraTest.state.bootstrap.appData'), 'appearance.json');
+      const terminal = `__astraTest.state.panes.get(${JSON.stringify(initial)}).term`;
+      await run(`window.initialThemeTerminal = ${terminal}; true`);
+      assert.equal(await run('matchMedia("(prefers-color-scheme: dark)").matches'), true);
+      for (const [theme, background] of [['light', '#ffffff'], ['dark', '#101316']]) {
+        await run('__astraTest.action("settings")');
+        await until(() => run('Boolean(document.querySelector("dialog[open] [name=theme]"))'), 'Theme setting missing');
+        await run(`document.querySelector('dialog[open] [name=theme]').value='${theme}';document.querySelector('dialog[open] .primary').click()`);
+        await until(() => run(`!document.querySelector('dialog[open]')&&matchMedia('(prefers-color-scheme: ${theme})').matches`), 'Theme did not apply');
+        assert.equal(await run(`${terminal} === window.initialThemeTerminal && ${terminal}.options.theme.background === '${background}'`), true);
+        assert.equal(JSON.parse(fs.readFileSync(themeFile, 'utf8')).theme, theme);
+      }
+      await run('delete window.initialThemeTerminal');
+    });
     await check('update download progress and verification render in the desktop window', async () => {
       const reportProgress = payload => window.webContents.send('astra:event', { type: 'update:progress', payload });
       reportProgress({ version: '99.0.0', percent: 25 });
@@ -328,8 +343,18 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
         await drop("document.getElementById('cancel-drop')", [localFiles[2]]);
         assert.equal(await run('__astraTest.state.files.busy'), 0);
         assert.ok(!fs.existsSync(path.join(fixture.remoteRoot, 'drop-b', path.basename(localFiles[2]))));
-        await drop("document.getElementById('files-panel')", [localFiles[2]]);
-        await until(() => fs.existsSync(path.join(fixture.remoteRoot, 'drop-b', path.basename(localFiles[2]))), 'SFTP panel drop did not upload');
+        const progress = contract.upload_progress;
+        const target = path.join(fixture.remoteRoot, 'drop-b', path.basename(localFiles[2]));
+        fs.writeFileSync(localFiles[2], Buffer.alloc(progress.bytes, 67));
+        fixture.counters.renameDelayMs = 700;
+        try {
+          await drop("document.getElementById('files-panel')", [localFiles[2]]);
+          await until(() => run(`!document.getElementById('upload-notice').hidden&&document.getElementById('upload-bar').value===${progress.before_commit}`), 'SFTP transfer progress missing before commit');
+          assert.equal(fs.existsSync(target), false);
+          assert.match(await run("document.getElementById('upload-metrics').textContent"), /99 % · 64\.0 КБ \/ 64\.0 КБ · .+\/с/);
+          await until(() => run(`document.getElementById('upload-bar').value===${progress.completed}`), 'SFTP progress did not complete');
+          assert.deepEqual(fs.readFileSync(target), fs.readFileSync(localFiles[2]));
+        } finally { fixture.counters.renameDelayMs = 0; }
         await until(() => run('__astraTest.state.files.busy===0'), 'Panel drop still running');
         await run('__astraTest.overview(true)');
         await drop(`${pane}.container`, [localFiles[0]]);
@@ -401,6 +426,7 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
         await until(() => Boolean(menu), 'SFTP context menu missing');
         menu.items.find(item => item.label === 'Права…').click();
         await until(() => run(`Boolean(document.querySelector('dialog[open] input[aria-label="Восьмеричный режим"]'))`), 'Permissions dialog missing');
+        assert.equal(await run(`document.querySelector('.permission-sudo').getBoundingClientRect().top >= document.querySelector('.permission-mode').getBoundingClientRect().bottom`), true);
         await run(`(()=>{const field=document.querySelector('dialog[open] input[aria-label="Восьмеричный режим"]');field.value="444";field.dispatchEvent(new Event("input"));document.querySelector('dialog[open] button.primary').click()})()`);
         await until(() => (fs.statSync(filename).mode & 0o777) === 0o444, 'SFTP chmod did not change the selected file');
         await until(() => run(`__astraTest.state.files.entries.some(entry=>entry.path==="/welcome.txt"&&entry.permissions==="r--r--r--")`), 'Permissions column did not refresh');

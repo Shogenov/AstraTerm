@@ -5,7 +5,7 @@ const {FloatingWindows}=require('../src/floating-windows.cjs');
 test('only a prepared local presentation window opens; closing returns ownership without closing a transport',async()=>{
   const contents=new EventEmitter();contents.setWindowOpenHandler=fn=>{contents.open=fn;};
   const owner={webContents:contents},events=[],moves=[];
-  const manager=new FloatingWindows({owner,url:'file:///app/floating.html',terminals:{get:id=>id==='pty'},
+  const manager=new FloatingWindows({owner,url:'file:///app/floating.html',terminals:{get:id=>id==='pty'},backgroundColor:()=> '#f3f6f8',
     rdp:{get:id=>id==='rdp',setWindow:(...args)=>moves.push(args),refresh(){},settledWindow:async()=>true},emit:(...args)=>events.push(args)});
   assert.throws(()=>manager.prepare({id:'tab',panes:['missing']}));
   assert.equal(contents.open({url:'https://example.test',frameName:'anything'}).action,'deny');
@@ -14,6 +14,7 @@ test('only a prepared local presentation window opens; closing returns ownership
   assert.equal(contents.open({url:allocation.url,frameName:'wrong'}).action,'deny');
   const result=contents.open({url:allocation.url,frameName:'astraterm-'+allocation.token});
   assert.equal(result.action,'allow');assert.equal(result.overrideBrowserWindowOptions.webPreferences.sandbox,true);
+  assert.equal(result.overrideBrowserWindowOptions.backgroundColor,'#f3f6f8');
   const child=new EventEmitter();child.webContents=new EventEmitter();child.webContents.setWindowOpenHandler=()=>{};
   child.setTitle=()=>{};child.isDestroyed=()=>false;child.close=()=>child.emit('closed');
   contents.emit('did-create-window',child,{url:allocation.url});

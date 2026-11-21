@@ -363,7 +363,7 @@ class FilesService {
       return { ...result, path: filename, mode: binding.mode, terminalId: binding.terminalId };
     });
   }
-  async upload(request) {
+  async upload(request, onProgress = () => {}) {
     return this._mutation(async () => {
       if (request.mode !== 'sftp') throw new Error('Загрузка доступна в режиме SFTP');
       validPath(request.targetPath || request.path);
@@ -376,8 +376,20 @@ class FilesService {
         const current = await this._lstat(binding, target);
         if ((existing && (!current || !sameStats(existing, current))) || (!existing && current)) throw new Error('Файл назначения изменился во время передачи');
       };
+      const started = performance.now();
+      let last = started;
+      const total = sourceStats.size;
+      let rate = 0;
+      const step = transferred => {
+        const now = performance.now();
+        if (now - last < 200 && transferred < total) return;
+        last = now;
+        rate = Math.max(0, transferred) * 1000 / Math.max(now - started, 1);
+        onProgress({ phase: 'uploading', transferred: Math.min(total, transferred), total, rate });
+      };
+      onProgress({ phase: 'uploading', transferred: 0, total, rate });
       try {
-        await this._call(binding, 'fastPut', source, temporary, { mode: existing ? existing.mode & 0o7777 : sourceStats.mode & 0o777 });
+        await this._call(binding, 'fastPut', source, temporary, { mode: existing ? existing.mode & 0o7777 : sourceStats.mode & 0o777, step });
         if (!sameStats(sourceStats, await fsp.lstat(source))) throw new Error('Исходный файл изменился во время передачи');
         if (existing) {
           const created = await this._call(binding, 'lstat', temporary);
@@ -385,7 +397,11 @@ class FilesService {
           await this._call(binding, 'chmod', temporary, existing.mode & 0o7777);
         }
         const result = await this._commitRemote(binding, temporary, target, existing, verify);
+        onProgress({ phase: 'completed', transferred: total, total, rate });
         return { ...result, mode: binding.mode, terminalId: binding.terminalId, path: target, bytes: sourceStats.size };
+      } catch (error) {
+        onProgress({ phase: 'failed' });
+        throw error;
       } finally { await this._unlink(binding, temporary).catch(() => {}); }
     });
   }

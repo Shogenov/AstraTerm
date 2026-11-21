@@ -26,7 +26,8 @@ def fixture(source):
     (source / (key.name + '.pub')).write_bytes(PUBLIC)
     (source / (key.name + '-cert.pub')).write_bytes(CERTIFICATE)
     for name, field in (('sessions.json', 'sessions'), ('ssh-profiles.json', 'identities'),
-                        ('sidebar.json', 'sidebar'), ('logging.json', 'logging')):
+                        ('sidebar.json', 'sidebar'), ('logging.json', 'logging'),
+                        ('appearance.json', 'appearance')):
         document = json.dumps(CONTRACT[field], ensure_ascii=False)
         document = document.replace('$KEY', json.dumps(str(key))[1:-1])
         document = document.replace('$MISSING', json.dumps(str(missing))[1:-1])
@@ -70,6 +71,7 @@ class BackupTest(unittest.TestCase):
             self.assertEqual(store.macros[0]['text'], 'date')
             self.assertEqual(json.loads((restored / 'sidebar.json').read_text()), CONTRACT['sidebar'])
             self.assertEqual(json.loads((restored / 'logging.json').read_text()), CONTRACT['logging'])
+            self.assertEqual(json.loads((restored / 'appearance.json').read_text()), CONTRACT['appearance'])
             vault = CredentialVault(str(restored / 'credentials.vault.json'))
             vault.unlock(CONTRACT['master_password'])
             self.assertEqual(vault.get(store.sessions[0]['credential_profile'], 'ssh'), CONTRACT['credential'])

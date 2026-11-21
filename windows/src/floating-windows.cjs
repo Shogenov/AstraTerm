@@ -4,14 +4,15 @@ const path = require('node:path');
 
 // Windows host presentation only. Panes, transports and the input router stay in the opener.
 class FloatingWindows {
-  constructor({owner, url, terminals, rdp, emit}) {
+  constructor({owner, url, terminals, rdp, emit, backgroundColor}) {
     Object.assign(this,{owner,url,terminals,rdp,emit});
     this.records=new Map();this.closing=false;
     owner.webContents.setWindowOpenHandler(({url,frameName})=>{
       const record=[...this.records.values()].find(item=>url===this.url+'#'+item.token && frameName==='astraterm-'+item.token && !item.window);
       if(!record || this.closing)return {action:'deny'};
       return {action:'allow',overrideBrowserWindowOptions:{width:1000,height:720,minWidth:420,minHeight:300,
-        title:record.title,icon:path.join(__dirname,'..','assets','astraterm.ico'),backgroundColor:'#171b20',autoHideMenuBar:true,
+        title:record.title,icon:path.join(__dirname,'..','assets','astraterm.ico'),
+        backgroundColor:backgroundColor(),autoHideMenuBar:true,
         webPreferences:{contextIsolation:true,sandbox:true,nodeIntegration:false,webviewTag:false,spellcheck:false,backgroundThrottling:false}}};
     });
     owner.webContents.on('did-create-window',(child,{url})=>{

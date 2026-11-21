@@ -24,7 +24,7 @@ test('portable backup restores locked vault, links and protected SSH key files',
   fs.writeFileSync(keyFile + '.pub', key.public);
   fs.writeFileSync(keyFile + '-cert.pub', certificate);
   for (const [name, field] of [['sessions.json', 'sessions'], ['ssh-profiles.json', 'identities'],
-    ['sidebar.json', 'sidebar'], ['logging.json', 'logging']]) {
+    ['sidebar.json', 'sidebar'], ['logging.json', 'logging'], ['appearance.json', 'appearance']]) {
     fs.writeFileSync(path.join(source, name), JSON.stringify(contract[field], (_key, value) =>
       value === '$KEY' ? keyFile : value === '$MISSING' ? missing : value));
   }
@@ -62,6 +62,7 @@ test('portable backup restores locked vault, links and protected SSH key files',
   assert.equal(identities.list().default_id, contract.identities.default_id);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(next, 'sidebar.json'), 'utf8')), contract.sidebar);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(next, 'logging.json'), 'utf8')), contract.logging);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(next, 'appearance.json'), 'utf8')), contract.appearance);
   const restoredVault = new CredentialVault(path.join(next, 'credentials.vault.json'));
   await restoredVault.unlock(contract.master_password);
   assert.deepEqual(restoredVault.get(document.sessions[0].credential_profile, 'ssh'), contract.credential);

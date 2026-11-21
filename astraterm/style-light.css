@@ -1,0 +1,63 @@
+@define-color bg_color #f3f6f8;
+@define-color fg_color #21303a;
+@define-color theme_bg_color #f3f6f8;
+@define-color theme_fg_color #21303a;
+@define-color theme_base_color #ffffff;
+@define-color theme_text_color #21303a;
+@define-color theme_selected_bg_color #d4eee4;
+@define-color theme_selected_fg_color #164f40;
+@define-color borders #c5ced6;
+
+window, dialog, headerbar, .app-toolbar, .sidebar, .files-panel, notebook,
+notebook > header, .workspace-tab-bar, .workspace-tab, .statusbar {
+  background-color: @bg_color; color: @fg_color;
+}
+.workspace-tabs > stack, .terminal-pane, .terminal-body, .terminal-surface, .tiled-terminals,
+textview, textview text, treeview, list {
+  background-color: @theme_base_color; color: @fg_color;
+}
+button, headerbar .titlebutton { color: #354954; }
+button:hover, button:active, button.flat:hover, headerbar .titlebutton:hover {
+  background-color: #e0e8ee; color: @fg_color;
+}
+headerbar .titlebutton.close:hover, button.destructive-action:hover { background-color: #f4dce0; color: #8a283e; }
+button:disabled { color: #667984; }
+button:checked, button.icon-button:checked, button.icon-button.panel-visible, button.multiexec-toggle:checked {
+  background-color: @theme_selected_bg_color; color: @theme_selected_fg_color;
+}
+button.primary, button.suggested-action { background-color: #22624f; color: #ffffff; }
+button.primary:hover, button.suggested-action:hover { background-color: #194e40; }
+button:focus, checkbutton:focus { outline-color: #377f67; }
+entry, entry.files-path, .quick-connect, .files-modes {
+  background-color: #e7edf1; color: @fg_color; caret-color: #246752;
+}
+entry:focus, entry.files-path:focus { background-color: #ffffff; border-color: #528873; }
+entry image, .eyebrow, .muted, .dim-label, .files-status, .terminal-title, .terminal-state { color: #526774; }
+entry selection, textview text selection { background-color: #cce8dc; color: @fg_color; }
+.brand, .section-title, .host-stats, .active-pane .terminal-title { color: @fg_color; }
+.brand-mark, .active-pane .terminal-focus-marker { color: #246752; }
+.count-badge, .terminal-heading, .files-modes button.active { background-color: #dce6ec; color: #354954; }
+.workspace-tab, notebook > header tab { color: #526774; }
+menu, popover, tooltip { background-color: #ffffff; color: @fg_color; border-color: @borders; }
+menuitem:hover, treeview.view:selected, row:selected { background-color: @theme_selected_bg_color; color: @theme_selected_fg_color; }
+menu separator, paned > separator { background-color: @borders; }
+treeview.view:hover, .workspace-tab:hover, notebook > header tab:hover { background-color: #e7edf1; color: @fg_color; }
+treeview.view header button { background-color: @bg_color; color: #455968; }
+.workspace-tab.active-tab, notebook > header tab:checked {
+  background-color: #ffffff; color: @fg_color; border-bottom-color: #246752;
+}
+.tab-drop-target, .workspace-tab.tab-drop-target { background-color: @theme_selected_bg_color; box-shadow: inset 0 0 0 1px #377f67; }
+.cancel-drop, .upload-notice { background-color: #ffffff; border-color: #82939e; color: @fg_color; }
+.upload-notice progressbar trough { background-color: #dce6ec; }
+.upload-notice progressbar progress { background-color: #246752; }
+.cancel-drop.tab-drop-target, .toast { background-color: #e1f1e8; border-color: #85b4a3; color: @theme_selected_fg_color; }
+.multiexec-selected .terminal-heading, .multiexec-bar.broadcast-active { background-color: #dcefe7; color: #164f40; }
+.multiexec-target, .multiexec-target:checked { color: #246752; }
+.multiexec-bar { background-color: #e7edf1; color: #354954; }
+scrollbar slider { background-color: #9dadb7; }
+scrollbar slider:hover { background-color: #6f8592; }
+checkbutton, radiobutton { color: @fg_color; }
+checkbutton check, radiobutton radio { background-color: #ffffff; border-color: #81949f; }
+checkbutton check:checked, radiobutton radio:checked {
+  background-color: #22624f; border-color: #22624f; color: #ffffff;
+}

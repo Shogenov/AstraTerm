@@ -29,5 +29,6 @@
     "profiles": [{"id": "fixture-identity", "name": "Тестовый ключ", "key_file": "$KEY"}]
   },
   "sidebar": {"collapsed": ["fixture-group"]},
-  "logging": {"enabled": true, "level": "debug"}
+  "logging": {"enabled": true, "level": "debug"},
+  "appearance": {"theme": "light"}
 }

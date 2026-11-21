@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard, shell, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard, shell, protocol, nativeTheme } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -42,6 +42,8 @@ let window;
 let profileDirectory;
 let diagnosticLog;
 let sidebarPath;
+let appearancePath;
+let appearanceWrites = Promise.resolve();
 let backups;
 let store;
 let terminals;
@@ -250,6 +252,7 @@ function captureBinding(request) {
 
 async function uploadFiles(endpoint, sources, check, results = [], terminalDirectory) {
   check();
+  const host = terminals.get(endpoint.terminalId)?.profile.host || '';
   const listing = await files.list(endpoint, terminalDirectory);
   const names = sources.map(source => path.basename(source));
   for (const source of sources) {
@@ -265,7 +268,9 @@ async function uploadFiles(endpoint, sources, check, results = [], terminalDirec
     const overwrite = existing.has(name);
     if (overwrite && !await confirm('Заменить существующий файл?', targetPath, 'Заменить')) continue;
     check();
-    results.push(await files.upload({ ...endpoint, localPath: sources[index], targetPath, overwrite }));
+    const id = crypto.randomUUID();
+    results.push(await files.upload({ ...endpoint, localPath: sources[index], targetPath, overwrite },
+      progress => emit('files:upload-progress', { ...progress, id, name, host })));
     existing.add(name);
   }
   return results;
@@ -318,7 +323,8 @@ async function finish(exitCode = 0) {
   floating?.dispose();
   identities?.dispose();
   trust?.dispose();
-  await Promise.all([...recordingFinished,terminalsFinished,folderWrites.catch(() => {}),loggingWrites.catch(() => {}),sftpDrag?.dispose()]);
+  await Promise.all([...recordingFinished,terminalsFinished,folderWrites.catch(() => {}),loggingWrites.catch(() => {}),
+    appearanceWrites.catch(() => {}),sftpDrag?.dispose()]);
   if (window && !window.isDestroyed()) window.destroy();
   if (IS_SMOKE) app.exit(Number.isInteger(exitCode) ? exitCode : 0);
   else app.quit();
@@ -425,7 +431,7 @@ async function openSession(args) {
 async function call(method, args) {
   switch (method) {
     case 'host:stats': return hostStats.read(args.id);
-    case 'bootstrap': return { store: store.snapshot(), identities: identities.list(), vault: vaultState(), platform: process.platform, home: os.homedir(), version: app.getVersion(), appData: profileDirectory, terminals: [...terminals.list(),...rdp.list()], collapsedFolders: [...collapsedFolders], smoke: IS_SMOKE };
+    case 'bootstrap': return { store: store.snapshot(), identities: identities.list(), vault: vaultState(), platform: process.platform, home: os.homedir(), version: app.getVersion(), appData: profileDirectory, terminals: [...terminals.list(),...rdp.list()], collapsedFolders: [...collapsedFolders], theme: nativeTheme.themeSource, smoke: IS_SMOKE };
     case 'backup:create': return backups.run(true);
     case 'backup:restore': return backups.run(false);
     case 'sidebar:collapse': {
@@ -629,6 +635,17 @@ async function call(method, args) {
     case 'tunnel:stop': return tunnels.stop(args.id);
     case 'tunnel:list': return tunnels.list();
     case 'app:updates': void updates.check(); return true;
+    case 'app:theme': {
+      const { theme } = args;
+      if (!['dark', 'light'].includes(theme)) throw new Error('Неизвестная тема оформления.');
+      appearanceWrites = appearanceWrites.catch(() => {}).then(async () => {
+        await writeAtomic(appearancePath, JSON.stringify({ theme }));
+        nativeTheme.themeSource = theme;
+        if (window && !window.isDestroyed()) window.setBackgroundColor(appBackgroundColor());
+      });
+      await appearanceWrites;
+      return theme;
+    }
     case 'logging:settings': return { ...diagnosticLog.settings, filename: diagnosticLog.filename };
     case 'logging:save': {
       const next = diagnosticLog.validate(args);
@@ -666,9 +683,18 @@ async function call(method, args) {
   }
 }
 
+function appBackgroundColor() {
+  return nativeTheme.shouldUseDarkColors ? '#171b20' : '#f3f6f8';
+}
+
 async function createWindow() {
   profileDirectory = activeProfile(appDirectory);
   sidebarPath = path.join(profileDirectory, 'sidebar.json');
+  appearancePath = path.join(profileDirectory, 'appearance.json');
+  nativeTheme.themeSource = 'dark';
+  try {
+    if (JSON.parse(fs.readFileSync(appearancePath, 'utf8'))?.theme === 'light') nativeTheme.themeSource = 'light';
+  } catch { /* Older profiles start with the default theme. */ }
   diagnosticLog = new DiagnosticLog(profileDirectory);
   diagnosticLog.write('info', 'app.start');
   installLocalUI(protocol, path.dirname(__dirname));
@@ -691,7 +717,8 @@ async function createWindow() {
   hostStats = new HostStats(files,terminals);
   tunnels = new TunnelManager({ terminals, emit });
   window = new BrowserWindow({ width: 1360, height: 840, minWidth: 900, minHeight: 600, frame: false,
-    title: 'AstraTerm', icon: path.join(__dirname, '..', 'assets', 'astraterm.ico'), backgroundColor: '#171b20', show: false, autoHideMenuBar: true,
+    title: 'AstraTerm', icon: path.join(__dirname, '..', 'assets', 'astraterm.ico'),
+    backgroundColor: appBackgroundColor(), show: false, autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false, spellcheck: false, backgroundThrottling: false } });
   Menu.setApplicationMenu(null);
   rdp=new RdpManager({window,emit,prompt,credentialProvider:async profile=>{
@@ -699,7 +726,7 @@ async function createWindow() {
     if(credential.username&&credential.username!==profile.username)throw new Error('Пользователь профиля изменился.');
     return credential.password;
   }});
-  floating=new FloatingWindows({owner:window,url:floatingURL,terminals,rdp,emit});
+  floating=new FloatingWindows({owner:window,url:floatingURL,terminals,rdp,emit,backgroundColor:appBackgroundColor});
   updates=new UpdateController({app,window,directory:appDirectory,dialog,finish,isClosing:()=>finishing||window.isDestroyed(),showProgress:value=>emit('update:progress',value),canInstall:async()=>{
     if(files.busy||dirtyCount){await dialog.showMessageBox(window,{type:'info',title:'Обновления AstraTerm',message:'Завершите файловые операции и сохраните открытые редакторы перед обновлением.'});return false;}installingUpdate=true;return true;
   },endInstall:()=>{installingUpdate=false;}});
@@ -710,7 +737,7 @@ async function createWindow() {
   window.webContents.session.setPermissionCheckHandler(() => false);
   backups = new BackupDialogs({ window, dialog, root: appDirectory, directory: profileDirectory,
     documents: documentsDirectory, prompt, confirm, isClosing: () => finishing || window.isDestroyed(),
-    flushSettings: () => Promise.all([folderWrites, loggingWrites]) });
+    flushSettings: () => Promise.all([folderWrites, loggingWrites, appearanceWrites]) });
   window.webContents.session.on('will-download', event => event.preventDefault());
   window.on('close', event => { if (!allowClose) { event.preventDefault(); void requestClose(); } });
   window.on('maximize', () => emit('window:state', { maximized: true }));

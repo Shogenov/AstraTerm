@@ -582,6 +582,7 @@ main {
   min-width: 28px;
 }
 .files-panel {
+  position: relative;
   width: var(--files);
   min-width: 220px;
   flex-shrink: 0;
@@ -590,6 +591,24 @@ main {
   flex-direction: column;
   gap: 10px;
 }
+.upload-notice {
+  position: absolute;
+  bottom: 32px;
+  left: 14px;
+  right: 14px;
+  z-index: 2;
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 11px;
+  pointer-events: none;
+}
+.upload-notice strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-notice progress { display: block; width: 100%; height: 6px; accent-color: var(--accent); }
 .files-panel .section-heading {
   justify-content: space-between;
 }
@@ -810,6 +829,11 @@ footer:has(.host-stats:not([hidden])) #connection-info { display:none; }
 #cancel-drop.active { color: var(--accent); border-color: var(--accent); }
 .permission-grid { width: 100%; margin: 0 0 12px; border-spacing: 8px; text-align: center; }
 .permission-grid th[scope="row"] { text-align: left; }
+.permission-mode, .permission-mode label, .permission-sudo { display: flex; align-items: center; gap: 8px; }
+.permission-mode { flex-wrap: wrap; }
+.permission-mode input { width: 70px; }
+.permission-mode output { font-family: Consolas, monospace; }
+.permission-sudo { margin-top: 12px; }
 .toast.error {
   border-color: #63424a;
   background: #362a30;
@@ -1111,3 +1135,67 @@ dialog.editor-dialog {
 .floating-title { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
 .floating-workspace { overflow:hidden; }
 .floating-placeholder { margin:auto; text-align:center; color:var(--muted); }
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f3f6f8;
+    --surface: #e7edf1;
+    --canvas: #ffffff;
+    --fg: #21303a;
+    --muted: #526774;
+    --accent: #246752;
+    --line: #c5ced6;
+    --hover: #e0e8ee;
+    --selected: #d4eee4;
+    --selected-text: #164f40;
+  }
+  button, .section-heading strong, .profile-text strong, .tab.active, .empty-workspace h1,
+  .terminal-pane.focused .pane-name, .help-list, .host-stats {
+    color: var(--fg);
+  }
+  button:hover, button:active, .session-row:hover, .folder-row:hover,
+  .file-row:hover, .tab:hover, .profile-row:hover, .manager-row:hover {
+    background: var(--hover);
+    color: var(--fg);
+  }
+  button:disabled { color: var(--muted); }
+  button.primary { background: var(--accent); color: #ffffff; }
+  button.primary:hover { background: #194e40; color: #ffffff; }
+  .window-controls button:last-child:hover { background: #a83c46; }
+  .session-row, .folder-row, .file-row { color: var(--fg); }
+  .session-row svg, .folder-row svg, .file-row svg, .folder-chevron, .empty-note, .empty-workspace,
+  .tab, .pane-heading, .pane-state, .file-head, .file-size, .file-date, .file-permissions,
+  .file-status, footer, .dialog-description, .dialog-heading .icon-button,
+  .field, .form-note, .override-row label, .profile-text small {
+    color: var(--muted);
+  }
+  .multi-toggle.active, #overview.active, .multi-bar.broadcast, .session-row.selected,
+  .folder-row.selected, .tab.drop-target, .file-row.selected, .profile-row.selected,
+  .manager-row.selected, .tag, .help-list kbd {
+    background: var(--selected);
+    color: var(--selected-text);
+  }
+  .multi-bar, .segments, .badge, .input-row button, .manager-actions button, .dialog-footer {
+    background: var(--surface);
+    color: var(--muted);
+  }
+  .resize-handle, .segments button.active, .pane-heading { background: #dce6ec; }
+  .segments button.active { color: var(--fg); }
+  .terminal-pane.recipient .pane-heading { background: var(--selected); }
+  .file-head { background: var(--bg); }
+  .destructive:hover, .toast.error { background: #f4dce0; color: #8a283e; border-color: #cf8d98; }
+  .form-error { color: #8a283e; }
+  .toast { background: #e1f1e8; color: var(--selected-text); border-color: #85b4a3; }
+  .upload-notice, dialog, .editor-area, .find-bar {
+    background: var(--canvas);
+    border-color: var(--line);
+    color: var(--fg);
+  }
+  #cancel-drop { background: var(--canvas); border-color: var(--muted); }
+  dialog::backdrop { background: #21303a55; }
+  .fingerprint { background: var(--surface); color: var(--selected-text); }
+  ::-webkit-scrollbar-thumb { background: #9dadb7; }
+  ::-webkit-scrollbar-thumb:hover { background: #6f8592; }
+  .xterm-viewport { scrollbar-color: #9dadb7 transparent; }
+}

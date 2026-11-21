@@ -95,11 +95,13 @@ def permissions_dialog(parent, name, mode):
     value = Gtk.Entry(text=format(mode, '04o' if mode > 0o777 else '03o'), max_length=4)
     value.set_width_chars(5)
     sudo = Gtk.CheckButton(label="Выполнить через sudo, если у вас есть права sudo")
+    sudo.set_halign(Gtk.Align.START)
+    sudo.get_child().set_line_wrap(True)
     symbolic = Gtk.Label(xalign=0)
     grid.attach(Gtk.Label(label="Восьмеричный режим", xalign=0), 0, 4, 2, 1)
     grid.attach(value, 2, 4, 1, 1)
     grid.attach(symbolic, 3, 4, 1, 1)
-    content.add(sudo)
+    content.pack_start(sudo, False, False, 0)
     updating = [False]
 
     def render(*_):

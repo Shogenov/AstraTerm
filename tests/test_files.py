@@ -479,6 +479,8 @@ class FileFollowTests(unittest.TestCase):
         browser._follow_source = None
         browser._pending_profile, browser._pending_auth_generation = None, None
         browser._pending_upload = None
+        browser._upload_notice_token = browser._upload_notice_timer = None
+        browser._upload_notice = types.SimpleNamespace(hide=lambda: None)
         browser._follow_failures = set()
         browser._remote_cache = files.OrderedDict()
         browser._remote_directories = files.OrderedDict()
