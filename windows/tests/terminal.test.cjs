@@ -34,7 +34,7 @@ function keyPair(encrypted = false) {
   return crypto.generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs1', format: 'pem', ...(encrypted ? { cipher: 'aes-256-cbc', passphrase: 'fixture key passphrase' } : {}) } });
 }
 
-async function sshFixture(t, { sharedUserKey, ed25519Host = false } = {}) {
+async function sshFixture(t, { sharedUserKey, ed25519Host = false, authorize } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'astraterm-ssh-'));
   const hostKey = ed25519Host ? { privateKey: utils.generateKeyPairSync('ed25519').private } : keyPair();
   const userKey = sharedUserKey || keyPair(true);
@@ -48,6 +48,7 @@ async function sshFixture(t, { sharedUserKey, ed25519Host = false } = {}) {
     client.on('close', () => state.clients.delete(client));
     client.on('handshake', negotiated => state.handshakes.push(negotiated));
     client.on('authentication', context => {
+      if (authorize) return authorize(context, client);
       if (context.username !== 'fixture-user' || context.method !== 'publickey' || !context.key.data.equals(user.getPublicSSH())) return context.reject(['publickey']);
       if (context.signature && user.verify(context.blob, context.signature, context.hashAlgo) !== true) return context.reject(['publickey']);
       context.accept();
@@ -80,6 +81,51 @@ async function sshFixture(t, { sharedUserKey, ed25519Host = false } = {}) {
   });
   return { directory, filename, userKey, port: server.address().port, state };
 }
+
+test('SSH asks for a missing login and handles a separate interactive second factor after partial success', async t => {
+  const contract = require('../../shared/contracts/ssh-interactive.json');
+  const authenticatedPassword = new WeakSet();
+  const methods = [];
+  const fixture = await sshFixture(t, { ed25519Host: true, authorize(context, client) {
+    const first = !authenticatedPassword.has(client);
+    methods.push(context.method);
+    if (context.username !== contract.username || context.method !== 'keyboard-interactive') {
+      return context.reject(first ? ['password', 'keyboard-interactive'] : ['keyboard-interactive']);
+    }
+    if (first) {
+      return context.prompt([{ prompt: contract.password_prompt, echo: false }], 'SSH', '', ([answer]) => {
+        if (answer !== contract.password) return context.reject(['keyboard-interactive']);
+        authenticatedPassword.add(client);
+        context.reject(['keyboard-interactive'], true);
+      });
+    }
+    context.prompt([{ prompt: contract.factor_prompt, echo: true }], 'Second factor', contract.factor_instruction, ([answer]) => {
+      if (answer === contract.factor_response) context.accept();
+      else context.reject(['keyboard-interactive']);
+    });
+  } });
+  const requests = [];
+  let passwords = 0;
+  const manager = new TerminalManager({
+    identityManager: { ensure: async () => ({}) },
+    trustStore: new HostTrustStore({ directory: fixture.directory, prompt: async () => true }),
+    credentialProvider: async () => { passwords++; return contract.password; },
+    prompt: async request => {
+      requests.push(request);
+      if (request.kind === 'ssh-username') return contract.username;
+      return contract.factor_response;
+    },
+  });
+  t.after(() => manager.dispose());
+  const record = await manager.create({ protocol: 'ssh', host: '127.0.0.1', port: fixture.port, username: '', credential_profile: 'fixture' });
+  assert.equal(record.status, 'running');
+  assert.equal(record.profile.username, contract.username);
+  assert.deepEqual(methods, ['none', 'keyboard-interactive', 'keyboard-interactive']);
+  assert.equal(passwords, 1);
+  assert.deepEqual(requests.map(item => item.kind), ['ssh-username', 'ssh-interactive']);
+  assert.equal(requests[1].secret, false);
+  assert.ok(requests[1].textInput && requests[1].message.includes(contract.factor_instruction));
+});
 
 test('SSH uses Ed25519 server, real PTY, encrypted RSA once, strict trust, resize and reconnect generations', async t => {
   const fixture = await sshFixture(t, { ed25519Host: true });

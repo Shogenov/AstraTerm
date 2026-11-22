@@ -169,8 +169,8 @@ class TerminalPane(Gtk.Box):
             argv = self.profile.get("_argv") or session_argv(self.profile)
             if (self.profile.get('_credential_provider') and self.profile.get('protocol') == 'ssh' and
                     not self.profile.get('key_file') and not self.profile.get('_agent_key_blob')):
-                argv = argv[:1] + ['-o','PreferredAuthentications=password,keyboard-interactive',
-                                  '-o','PubkeyAuthentication=no','-o','NumberOfPasswordPrompts=1'] + argv[1:]
+                argv = argv[:1] + ['-o', 'PreferredAuthentications=password,keyboard-interactive',
+                                  '-o', 'PubkeyAuthentication=no'] + argv[1:]
             if self.profile.get('_credential_prompt') and self.profile.get('protocol') == 'ssh':
                 argv = [sys.executable,os.path.join(os.path.dirname(__file__),'credential_launch.py'),'--'] + argv
             if self.profile.get("_recording_path"):
@@ -192,13 +192,18 @@ class TerminalPane(Gtk.Box):
             if self.profile.get('_credential_prompt') and self.profile.get('protocol') == 'ssh':
                 from .openssh_sftp import _PromptBroker
                 self._close_credentials()
-                self._credential_runtime = tempfile.mkdtemp(prefix='astraterm-credential-')
-                attempts = [0]
+                runtime = self._credential_runtime = tempfile.mkdtemp(prefix='astraterm-credential-')
+                used_password = [False]
+
+                def use_saved():
+                    if used_password[0]:
+                        return None
+                    used_password[0] = True
+                    return self.profile['_credential_provider']()
+
                 def answer(prompt):
-                    if re.search(r'password\s*:',prompt,re.I):
-                        attempts[0] += 1
-                        if attempts[0] > 1: return None
-                    return self.profile['_credential_prompt'](prompt)
+                    return self.profile['_credential_prompt'](self.profile, prompt, use_saved,
+                                                               lambda: self.closed or self._credential_runtime != runtime)
                 self._credential_broker = _PromptBroker(self._credential_runtime, answer)
                 environment.update(SSH_ASKPASS=os.path.abspath(os.path.join(os.path.dirname(__file__),'../scripts/astraterm-askpass')),
                                    ASTRATERM_ASKPASS_SOCKET=self._credential_broker.path,ASTRATERM_ASKPASS_REQUEST='1',
@@ -270,12 +275,12 @@ class TerminalPane(Gtk.Box):
             self._drain_fd = None
 
     def _close_credentials(self):
-        if self._credential_broker is not None:
-            self._credential_broker.close()
-            self._credential_broker = None
-        if self._credential_runtime is not None:
-            shutil.rmtree(self._credential_runtime,ignore_errors=True)
-            self._credential_runtime = None
+        broker, self._credential_broker = self._credential_broker, None
+        runtime, self._credential_runtime = self._credential_runtime, None
+        if broker is not None:
+            broker.close()
+        if runtime is not None:
+            shutil.rmtree(runtime, ignore_errors=True)
 
     def _drain_master(self):
         if self._drain_fd is None:

@@ -525,13 +525,14 @@ main {
 .terminal-viewport {
   width: 100%;
   height: 100%;
+  background: var(--canvas);
 }
 .xterm {
   height: 100%;
 }
 .xterm .xterm-viewport {
-  scrollbar-width: thin;
-  scrollbar-color: #34414a transparent;
+  background-color: var(--canvas);
+  overflow: hidden;
 }
 .empty-workspace {
   position: absolute;
@@ -1199,5 +1200,4 @@ dialog.editor-dialog {
   .fingerprint { background: var(--surface); color: var(--selected-text); }
   ::-webkit-scrollbar-thumb { background: #9dadb7; }
   ::-webkit-scrollbar-thumb:hover { background: #6f8592; }
-  .xterm-viewport { scrollbar-color: #9dadb7 transparent; }
 }

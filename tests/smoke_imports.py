@@ -11,13 +11,14 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from unittest import mock
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import paramiko
 import gi
 gi.require_version('Gtk','3.0')
 from gi.repository import Gtk,Gdk,GLib
 from astraterm.app import MainWindow
-from astraterm.core import SessionStore
+from astraterm.core import SessionStore, default_session, session_argv
 from astraterm.importers import parse_import
 from astraterm.dialogs import SessionDialog
 from astraterm.vault import CredentialVault
@@ -29,11 +30,25 @@ DRAG_BYTES = b'SFTP copy to the local file manager\x00\xff'
 
 
 class Server(paramiko.ServerInterface):
-    def __init__(self,fixture):self.fixture=fixture;self.shell=threading.Event()
-    def get_allowed_auths(self,username):return 'password'
+    def __init__(self,fixture):self.fixture=fixture;self.shell=threading.Event();self.password_accepted=False
+    def get_allowed_auths(self,username):
+        return 'keyboard-interactive' if self.fixture.factor and self.password_accepted else 'password'
     def check_auth_password(self,username,password):
-        if username=='ops' and password==self.fixture.password:
+        if username==self.fixture.username and password==self.fixture.password:
+            if self.fixture.factor:
+                self.password_accepted=True
+                return paramiko.AUTH_PARTIALLY_SUCCESSFUL
             self.fixture.authenticated+=1;return paramiko.AUTH_SUCCESSFUL
+        return paramiko.AUTH_FAILED
+    def check_auth_interactive(self,username,submethods):
+        if self.password_accepted and username==self.fixture.username:
+            factor=self.fixture.factor
+            return paramiko.InteractiveQuery('SSH', factor['factor_instruction'], (factor['factor_prompt'], False))
+        return paramiko.AUTH_FAILED
+    def check_auth_interactive_response(self,responses):
+        if self.password_accepted and responses == [self.fixture.factor['factor_response']]:
+            self.fixture.authenticated+=1
+            return paramiko.AUTH_SUCCESSFUL
         return paramiko.AUTH_FAILED
     def check_channel_request(self,kind,channel):return paramiko.OPEN_SUCCEEDED if kind=='session' else paramiko.OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED
     def check_channel_pty_request(self,*args):return True
@@ -144,8 +159,11 @@ def check_drag_export(browser, destination):
 
 
 class Fixture(object):
-    def __init__(self):
-        self.password='TEST_ONLY_imported_account=пароль';self.authenticated=0;self.clients=[];self.closed=False
+    def __init__(self,factor=None):
+        self.factor=factor
+        self.username=factor['username'] if factor else 'ops'
+        self.password=factor['password'] if factor else 'TEST_ONLY_imported_account=пароль'
+        self.authenticated=0;self.clients=[];self.closed=False
         self.key=paramiko.RSAKey.generate(2048)
         self.socket=socket.socket();self.socket.bind(('127.0.0.1',0));self.socket.listen(8);self.socket.settimeout(.2)
         self.port=self.socket.getsockname()[1]
@@ -179,6 +197,60 @@ class Fixture(object):
     def close(self):
         self.closed=True;self.socket.close()
         for client in self.clients:client.close()
+
+
+def check_interactive_auth(root):
+    contract_path = Path(__file__).resolve().parents[1] / 'shared/contracts/ssh-interactive.json'
+    contract = json.loads(contract_path.read_text(encoding='utf-8'))
+    fixture = Fixture(factor=contract)
+    window = MainWindow(SessionStore(root/'mfa/sessions.json'), start_local=False, auto_sftp=False)
+    try:
+        known = root/'mfa-known-hosts'
+        known.write_text('[127.0.0.1]:{} {} {}\n'.format(fixture.port, fixture.key.get_name(), fixture.key.get_base64()),
+                         encoding='utf-8')
+        vault = window.credential_vault
+        vault.unlock('TEST_ONLY_master_password', create=True)
+        vault.merge([{'id': 'mfa-fixture', 'name': 'SSH interactive fixture', 'username': '',
+                      'password': fixture.password, 'protocol': 'ssh'}])
+        profile = default_session('ssh')
+        profile.update(host='127.0.0.1', port=fixture.port, credential_profile='mfa-fixture')
+        window.present()
+        answered = []
+
+        def answer_factor():
+            for dialog in Gtk.Window.list_toplevels():
+                if not isinstance(dialog, Gtk.Dialog) or dialog.get_title() != 'Аутентификация SSH · 127.0.0.1':
+                    continue
+                controls = dialog.get_content_area().get_children()
+                entry = next(item for item in controls if isinstance(item, Gtk.Entry))
+                label = next(item for item in controls if isinstance(item, Gtk.Label))
+                answered.append((label.get_text().strip(), entry.get_visibility()))
+                entry.set_text(contract['factor_response'])
+                dialog.response(Gtk.ResponseType.OK)
+                return False
+            return True
+
+        def isolated_argv(profile):
+            argv = session_argv(profile)
+            return argv[:1] + ['-F', '/dev/null', '-o', 'UserKnownHostsFile=' + str(known), '-o',
+                               'GlobalKnownHostsFile=/dev/null', '-o', 'StrictHostKeyChecking=yes'] + argv[1:]
+
+        timer = GLib.timeout_add(50, answer_factor)
+        try:
+            with mock.patch('astraterm.app.name_dialog', return_value=contract['username']) as username_dialog, \
+                    mock.patch('astraterm.terminal.session_argv', side_effect=isolated_argv):
+                window.open_session(profile)
+                wait_for(lambda: fixture.authenticated == 1, 'OpenSSH partial password and interactive second factor', timeout=15)
+            assert username_dialog.call_count == 1
+            assert answered == [(contract['factor_prompt'], False)]
+        finally:
+            if not answered:
+                GLib.source_remove(timer)
+        print('PASS native OpenSSH prompts for a missing username and for the second factor after a vault password', flush=True)
+    finally:
+        window.shutdown()
+        window.destroy()
+        fixture.close()
 
 
 def main():
@@ -359,6 +431,7 @@ def main():
                 assert second.credential_vault.unlocked
             finally:second.shutdown();second.destroy();pump(.1)
             print('PASS imported profile selector / encrypted at rest / real OpenSSH askpass / automatic SFTP / child cleanup / restart unlock',flush=True)
+            check_interactive_auth(root)
             print('IMPORTS_SMOKE_OK',flush=True)
         finally:
             if window is not None:window.shutdown();window.destroy();pump(.2)

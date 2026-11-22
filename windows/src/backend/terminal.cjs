@@ -7,6 +7,10 @@ const crypto = require('node:crypto');
 const iconv = require('iconv-lite');
 const { Client } = require('ssh2');
 const { initializationCommand } = require('./powershell-init.cjs');
+const { validateSession } = require('./store.cjs');
+
+const PASSWORD_PROMPT = /^\s*(?:password|пароль)\s*:\s*$/iu;
+const SECOND_FACTOR = /\botp\b|token|code|passphrase|one.?time|verification|challenge|factor|\bpin\b|код|одноразов|токен|подтверждени/iu;
 
 function dimensions(value = {}) {
   return { cols: Math.max(2, Math.min(500, Math.round(Number(value.cols) || 100))), rows: Math.max(2, Math.min(300, Math.round(Number(value.rows) || 30))) };
@@ -105,6 +109,15 @@ class TerminalManager {
     if (!this.identityManager || !this.trustStore) throw new Error('SSH-профили и проверка ключей сервера не настроены.');
     const generation = record.generation;
     const profile = record.profile;
+    if (!profile.username) {
+      const user = await this.prompt?.({ kind: 'ssh-username', title: 'Пользователь SSH', textInput: true,
+        secret: false, label: 'Имя пользователя', message: `Введите имя пользователя для ${profile.host}.` });
+      if (!this._current(record, generation) || user == null) throw new Error('Подключение отменено.');
+      const username = validateSession({ ...profile, username: String(user).trim() }).username;
+      if (!username) throw new Error('Укажите имя пользователя SSH.');
+      profile.username = username;
+      this.emit('terminal:profile', { id: record.id, generation, profile: { ...profile } });
+    }
     const encoding = profile.encoding || 'utf-8';
     if (!iconv.encodingExists(encoding)) throw new Error('Кодировка терминала не поддерживается.');
     const endpoints = parseJumpHosts(profile.jump_host, profile).concat({ ...profile, jump_host: '' });
@@ -154,39 +167,64 @@ class TerminalManager {
       let ready = false;
       let trustError;
       const tried = new Set();
+      const acceptedMethods = new Set();
+      let previousMethod;
+      let stages = 0;
+      let usedSavedPassword = false;
+      const canUseSavedPassword = () => Boolean(endpoint.credential_profile && this.credentialProvider && !usedSavedPassword);
+      const savedPassword = () => {
+        usedSavedPassword = true;
+        return this.credentialProvider(endpoint);
+      };
       const authHandler = (methods, partial, callback) => {
         if (!this._current(record, generation)) return callback(false);
+        if (partial) {
+          if (++stages > 6) return callback(false);
+          if (previousMethod !== 'keyboard-interactive') acceptedMethods.add(previousMethod);
+          tried.clear();
+        }
         const allowed = methods || ['none', 'publickey', 'password', 'keyboard-interactive'];
-        if (!tried.has('none')) { tried.add('none'); return callback({ type: 'none', username: endpoint.username }); }
-        if (allowed.includes('publickey') && !tried.has('key') && (identity.privateKey || identity.agent)) {
-          tried.add('key');
+        const eligible = method => allowed.includes(method) && !tried.has(method) && !acceptedMethods.has(method);
+        const attempt = method => { tried.add(method); previousMethod = method; };
+        if (methods === null) {
+          attempt('none');
+          return callback({ type: 'none', username: endpoint.username });
+        }
+        if (eligible('publickey') && (identity.privateKey || identity.agent)) {
+          attempt('publickey');
           return callback(identity.privateKey ? { type: 'publickey', username: endpoint.username, key: identity.privateKey } : { type: 'agent', username: endpoint.username, agent: identity.agent });
         }
         // A selected identity is never silently replaced by unrelated agent keys.
-        if (allowed.includes('password') && !tried.has('password') && (this.prompt || this.credentialProvider)) {
-          tried.add('password');
-          Promise.resolve().then(() => endpoint.credential_profile ? this.credentialProvider(endpoint) :
-            this.prompt({ kind: 'password', title: 'Пароль SSH', host: endpoint.host, secret: true, message: `Пароль ${endpoint.username}@${endpoint.host}` })).then(password => {
-            if (!this._current(record, generation) || password === null || password === undefined) return callback(false);
-            callback({ type: 'password', username: endpoint.username, password: String(password) });
-          }).catch(() => callback(false));
-          return;
-        }
-        if (allowed.includes('keyboard-interactive') && !tried.has('keyboard') && this.prompt) {
-          tried.add('keyboard');
+        if (eligible('keyboard-interactive') && this.prompt) {
+          attempt('keyboard-interactive');
           return callback({ type: 'keyboard-interactive', username: endpoint.username, prompt: async (name, instructions, language, prompts, finish) => {
             try {
               const answers = [];
               for (const item of prompts) {
-                const savedPassword = endpoint.credential_profile && !item.echo && /password/i.test(item.prompt) && !/otp|token|code|passphrase|one.?time|verification|challenge|factor|\bpin\b/i.test(item.prompt) && !tried.has('saved-keyboard');
-                if (savedPassword) tried.add('saved-keyboard');
-                const answer = savedPassword ? await this.credentialProvider(endpoint) : await this.prompt({ kind: 'password', title: name || 'Аутентификация SSH', host: endpoint.host, secret: !item.echo, message: String(item.prompt || instructions || 'Ответ сервера').slice(0, 1000) });
-                if (answer === null || answer === undefined || !this._current(record, generation)) return finish([]);
+                if (!this._current(record, generation)) return;
+                const useSaved = canUseSavedPassword() && !item.echo && PASSWORD_PROMPT.test(item.prompt) &&
+                  !SECOND_FACTOR.test(`${name}\n${instructions}\n${prompts.map(field => field.prompt).filter(text => text !== item.prompt).join('\n')}`);
+                const message = [String(instructions || '').slice(0, 1000), String(item.prompt || 'Ответ сервера').slice(0, 1000)]
+                  .filter(Boolean).join('\n\n');
+                const answer = useSaved ? await savedPassword() : await this.prompt({ kind: 'ssh-interactive',
+                  title: `Аутентификация SSH · ${endpoint.host}`, host: endpoint.host, textInput: true,
+                  secret: !item.echo, label: 'Ответ на запрос сервера', message });
+                if (!this._current(record, generation)) return;
+                if (answer == null) return client.end();
                 answers.push(String(answer));
               }
               finish(answers);
-            } catch { finish([]); }
+            } catch { client.end(); }
           } });
+        }
+        if (eligible('password') && (this.prompt || canUseSavedPassword())) {
+          attempt('password');
+          Promise.resolve().then(() => canUseSavedPassword() ? savedPassword() :
+            this.prompt({ kind: 'password', title: 'Пароль SSH', host: endpoint.host, secret: true, message: `Пароль ${endpoint.username}@${endpoint.host}` })).then(password => {
+            if (!this._current(record, generation) || password == null) return callback(false);
+            callback({ type: 'password', username: endpoint.username, password: String(password) });
+          }).catch(() => callback(false));
+          return;
         }
         callback(false);
       };
@@ -195,7 +233,8 @@ class TerminalManager {
         if(error.level==='client-authentication'){
           const named=endpoint.identity_profile&&endpoint.identity_profile!=='system';
           const source=named?'выбранный профиль SSH-ключа':endpoint.key_file?'файл '+path.basename(endpoint.key_file):identity.agent?'SSH-agent':'пароль';
-          error=new Error(`Сервер отклонил аутентификацию ${endpoint.username}@${endpoint.host}. Использовались: ${source}. Проверьте пользователя и выбранный ключ либо пароль.`);
+          const hint = tried.has('keyboard-interactive') || stages > 0 ? ' Проверьте ответы на запросы SSH, включая второй фактор.' : ' Проверьте пользователя и выбранный ключ либо пароль.';
+          error=new Error(`Сервер отклонил аутентификацию ${endpoint.username}@${endpoint.host}. Использовались: ${source}.${hint}`);
         }
         if (!ready) return reject(trustError || error);
         if (this._current(record, generation) && record.status === 'running') this._status(record, 'error', { message: safeError(error) });

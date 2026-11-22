@@ -853,6 +853,11 @@ class MainWindow(Gtk.Window):
             if profile.get('credential_profile') and not profile.get('_credential_provider'):
                 self.credentials.prepare(profile, lambda ready: self.open_session(ready, on_open, on_failure), on_failure)
                 return None
+            profile = self._ssh_username(profile)
+            if profile is None:
+                if on_failure:
+                    on_failure()
+                return None
             identity = self._requested_identity(profile)
         except ValueError as exc:
             self.diagnostic_log.write('warning', 'session.profile-invalid')
@@ -865,6 +870,20 @@ class MainWindow(Gtk.Window):
                                            lambda ready: self._open_session_ready(ready, on_open, on_failure), on_failure)
             return None
         return self._open_session_ready(profile, on_open, on_failure)
+
+    def _ssh_username(self, profile, previous=None):
+        if profile.get('protocol') != 'ssh' or profile.get('_argv') or profile.get('username'):
+            return profile
+        if previous and all(previous.get(field) == profile.get(field) for field in ('host', 'port', 'jump_host')):
+            if previous.get('username'):
+                return dict(profile, username=previous['username'])
+        username = name_dialog(self, 'Пользователь SSH · ' + profile['host'])
+        if username is None:
+            return None
+        username = validate_session(dict(profile, username=username.strip()))['username']
+        if not username:
+            raise ValueError('Укажите имя пользователя SSH.')
+        return dict(profile, username=username)
 
     def _resolve_group_session(self, profile):
         if profile.get("_argv"):
@@ -1600,6 +1619,10 @@ class MainWindow(Gtk.Window):
     def split_with_profile(self, profile, orientation=Gtk.Orientation.HORIZONTAL):
         try:
             profile = self._resolve_group_session(profile)
+            if not profile.get('credential_profile'):
+                profile = self._ssh_username(profile)
+                if profile is None:
+                    return None
             identity = self._requested_identity(profile)
         except ValueError as exc:
             error(self, "Проверьте SSH-профиль", exc)
@@ -1621,6 +1644,13 @@ class MainWindow(Gtk.Window):
             return None
         if profile.get('credential_profile') and not profile.get('_credential_provider'):
             self.credentials.prepare(profile, lambda ready: self._split_ready(ready, orientation, workspace))
+            return None
+        try:
+            profile = self._ssh_username(profile)
+        except ValueError as exc:
+            error(self, 'Проверьте параметры подключения', exc)
+            return None
+        if profile is None:
             return None
         workspace = workspace or self.current_workspace()
         if workspace is None:
@@ -1911,6 +1941,9 @@ class MainWindow(Gtk.Window):
         def authenticate(ready):
             if self.closed or pane.closed or pane.connection_generation!=generation:return
             try:
+                ready = self._ssh_username(ready, previous=pane.profile)
+                if ready is None:
+                    return
                 identity=self._requested_identity(ready)
                 if identity:self._prepare_identity_session(ready,identity,prepared)
                 else:prepared(ready)

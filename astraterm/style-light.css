@@ -3,6 +3,7 @@
 @define-color theme_bg_color #f3f6f8;
 @define-color theme_fg_color #21303a;
 @define-color theme_base_color #ffffff;
+@define-color terminal_background #ffffff;
 @define-color theme_text_color #21303a;
 @define-color theme_selected_bg_color #d4eee4;
 @define-color theme_selected_fg_color #164f40;
@@ -12,7 +13,6 @@ window, dialog, headerbar, .app-toolbar, .sidebar, .files-panel, notebook,
 notebook > header, .workspace-tab-bar, .workspace-tab, .statusbar {
   background-color: @bg_color; color: @fg_color;
 }
-.workspace-tabs > stack, .terminal-pane, .terminal-body, .terminal-surface, .tiled-terminals,
 textview, textview text, treeview, list {
   background-color: @theme_base_color; color: @fg_color;
 }

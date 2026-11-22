@@ -121,12 +121,14 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
       const terminal = `__astraTest.state.panes.get(${JSON.stringify(initial)}).term`;
       await run(`window.initialThemeTerminal = ${terminal}; true`);
       assert.equal(await run('matchMedia("(prefers-color-scheme: dark)").matches'), true);
-      for (const [theme, background] of [['light', '#ffffff'], ['dark', '#101316']]) {
+      for (const [theme, background, rgb] of [['light', '#ffffff', 'rgb(255, 255, 255)'], ['dark', '#101316', 'rgb(16, 19, 22)']]) {
         await run('__astraTest.action("settings")');
         await until(() => run('Boolean(document.querySelector("dialog[open] [name=theme]"))'), 'Theme setting missing');
         await run(`document.querySelector('dialog[open] [name=theme]').value='${theme}';document.querySelector('dialog[open] .primary').click()`);
         await until(() => run(`!document.querySelector('dialog[open]')&&matchMedia('(prefers-color-scheme: ${theme})').matches`), 'Theme did not apply');
         assert.equal(await run(`${terminal} === window.initialThemeTerminal && ${terminal}.options.theme.background === '${background}'`), true);
+        assert.equal(await run(`getComputedStyle(${terminal}.element.querySelector('.xterm-viewport')).backgroundColor`), rgb);
+        assert.equal(await run(`getComputedStyle(${terminal}.element.querySelector('.xterm-viewport')).overflowX`), 'hidden');
         assert.equal(JSON.parse(fs.readFileSync(themeFile, 'utf8')).theme, theme);
       }
       await run('delete window.initialThemeTerminal');

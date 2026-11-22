@@ -1,0 +1,8 @@
+{
+  "username": "fixture-user",
+  "password": "fixture account password",
+  "password_prompt": "Password:",
+  "factor_prompt": "Verification code:",
+  "factor_instruction": "Enter the second factor from your authenticator.",
+  "factor_response": "271638"
+}

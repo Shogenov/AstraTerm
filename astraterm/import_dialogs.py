@@ -1,6 +1,5 @@
 """GTK import preview and master-password lifecycle, separate from session data."""
 import os
-import re
 import threading
 from gi.repository import Gtk, GLib
 from .dialogs import error, confirm
@@ -79,7 +78,7 @@ class CredentialController(object):
             effective = dict(profile, username=credential['username'] or profile.get('username',''))
             if not effective.get('identity_profile'):effective['identity_profile']='system'
             effective['_credential_provider'] = lambda: self.password_for(effective)
-            effective['_credential_prompt'] = lambda prompt: self.answer_prompt(effective,prompt)
+            effective['_credential_prompt'] = self.answer_prompt
             effective['_credential_gate'] = self.gate
             callback(effective)
         self.ensure(ready, on_failure=on_failure)
@@ -99,24 +98,62 @@ class CredentialController(object):
             raise ValueError('Пользователь профиля изменился. Откройте сохранённое подключение заново.')
         return record['password']
 
-    def answer_prompt(self, profile, prompt):
-        # The target password is never reused for gateway, key or OTP prompts.
-        if re.search(r'otp|token|code|passphrase|one.?time|verification|challenge|factor|\bpin\b',prompt,re.I): return None
-        if re.search(r'password\s*:',prompt,re.I) and 'passphrase' not in prompt.lower():
-            host = profile.get('host',''); username = profile.get('username','')
-            if host.lower() in prompt.lower() and username and username in prompt:
-                return self.password_for(profile)
+    def answer_prompt(self, profile, prompt, use_saved, cancelled):
+        if self.window.closed or cancelled():
             return None
-        if 'are you sure you want to continue connecting' not in prompt.lower(): return None
-        result = []; completed = threading.Event()
+        username, host = profile.get('username', ''), profile.get('host', '')
+        direct_password = "{}@{}'s password:".format(username, host)
+        if username and host and prompt.strip() == direct_password:
+            password = use_saved()
+            if password is not None:
+                return password
+        result, completed = [], threading.Event()
+
         def ask():
             try:
-                result.append('yes' if not self.window.closed and confirm(self.window,'Новый ключ SSH-сервера',prompt) else None)
-            finally: completed.set()
+                if self.window.closed or cancelled():
+                    return False
+                if 'are you sure you want to continue connecting' in prompt.lower():
+                    answer = 'yes' if confirm(self.window, 'Новый ключ SSH-сервера', prompt) else None
+                else:
+                    answer = self._ssh_response(host, prompt, cancelled)
+                if not self.window.closed and not cancelled():
+                    result.append(answer)
+            finally:
+                completed.set()
             return False
         GLib.idle_add(ask)
-        if not completed.wait(120): return None
+        while not completed.wait(.2):
+            if self.window.closed or cancelled():
+                return None
         return result[0] if result else None
+
+    def _ssh_response(self, host, prompt, cancelled):
+        dialog = Gtk.Dialog(title='Аутентификация SSH · ' + host, transient_for=self.window, modal=True)
+        dialog.add_buttons('Отмена', Gtk.ResponseType.CANCEL, 'Продолжить', Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        box = dialog.get_content_area()
+        box.set_spacing(8)
+        box.set_border_width(16)
+        box.add(Gtk.Label(label=prompt.strip()[:1600], xalign=0, wrap=True, max_width_chars=65))
+        entry = Gtk.Entry(visibility=False, activates_default=True)
+        entry.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+        box.add(entry)
+        dialog.show_all()
+        entry.grab_focus()
+
+        def check():
+            if self.window.closed or cancelled():
+                dialog.response(Gtk.ResponseType.CANCEL)
+            return True
+
+        timer = GLib.timeout_add(200, check)
+        try:
+            return entry.get_text() if dialog.run() == Gtk.ResponseType.OK else None
+        finally:
+            entry.set_text('')
+            GLib.source_remove(timer)
+            dialog.destroy()
 
     def manage(self, *_):
         if getattr(self,'manager',None) is not None:self.manager.present();return self.manager

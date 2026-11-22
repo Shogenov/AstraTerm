@@ -180,6 +180,11 @@ def check_theme(window, panes):
         pump(.2)
         color = window.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
         assert minimum <= color.red <= maximum, color
+        pane = window.active_pane()
+        body = pane.terminal.get_parent()
+        surface = pane.get_style_context().get_background_color(pane.get_state_flags())
+        padding = body.get_style_context().get_background_color(body.get_state_flags())
+        assert surface.equal(padding) and minimum <= padding.red <= maximum, (theme, surface, padding)
         with open(window.appearance_path, encoding='utf-8') as stream:
             assert json.load(stream) == {'theme': theme}
         assert window.theme == theme and [pane.pid for pane in panes] == processes

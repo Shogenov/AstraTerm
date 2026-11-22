@@ -4,6 +4,7 @@
 @define-color theme_bg_color #171b20;
 @define-color theme_fg_color #d9e1e8;
 @define-color theme_base_color #14181d;
+@define-color terminal_background #101316;
 @define-color theme_text_color #d9e1e8;
 @define-color theme_selected_bg_color #253a35;
 @define-color theme_selected_fg_color #b5efdb;
@@ -73,8 +74,9 @@ notebook > header tab:checked { background: #101316; color: #e0e8ed; border-bott
 .upload-notice { padding: 8px 10px; background: #20262d; color: #d9e1e8; border: 1px solid #52616c; border-radius: 8px; }
 .upload-notice progressbar trough { background: #52616c; min-height: 5px; }
 .upload-notice progressbar progress { background: #82d9bd; min-height: 5px; }
-.workspace-tabs > stack { background: #101316; }
-.terminal-pane, .terminal-body, .terminal-surface, .tiled-terminals { background: #101316; }
+.workspace-tabs > stack, .terminal-pane, .terminal-body, .terminal-surface, .tiled-terminals {
+  background-color: @terminal_background;
+}
 .terminal-body { padding: 7px 0 7px 10px; }
 .terminal-heading { background: #151a1e; padding: 0 3px; font-size: 11px; }
 .terminal-title { color: #8e9ca8; }

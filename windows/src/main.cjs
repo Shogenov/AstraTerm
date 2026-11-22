@@ -529,6 +529,8 @@ async function call(method, args) {
       if(!record)throw Error('Терминал закрыт.');
       const generation=record.generation,profile=await prepareProfile(latestProfile(record.profile));
       if(profile.protocol!==record.profile.protocol)throw Error('Протокол подключения изменён. Откройте новую вкладку из списка подключений.');
+      if (profile.protocol === 'ssh' && !profile.username && ['host', 'port', 'jump_host'].every(field => profile[field] === record.profile[field]))
+        profile.username = record.profile.username;
       if((rdp.get(args.id)||terminals.get(args.id))!==record||record.generation!==generation)throw Error('Подключение уже изменилось.');
       requireIdleFiles();files.closeTerminal(args.id); await tunnels.sessionClosed(args.id); stopRecording(args.id);
       return rdp.get(args.id)?rdp.reconnect(args.id,profile):terminals.reconnect(args.id,profile);
