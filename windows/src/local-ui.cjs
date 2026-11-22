@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const origin = 'astraterm://app';
 const routes = new Map([
-  ...['index.html', 'floating.html', 'style.css', 'input-router.js', 'host-stats.js', 'file-sort.js', 'app.js']
+  ...['index.html', 'floating.html', 'style.css', 'input-router.js', 'host-stats.js', 'file-sort.js', 'icons.js', 'app.js']
     .map(name => ['/src/renderer/' + name, 'src/renderer/' + name]),
   ...['@xterm/xterm/css/xterm.css', '@xterm/xterm/lib/xterm.js', '@xterm/addon-fit/lib/addon-fit.js', '@xterm/addon-search/lib/addon-search.js']
     .map(name => ['/node_modules/' + name, 'node_modules/' + name]),

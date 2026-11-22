@@ -8,7 +8,7 @@ const path = require('node:path');
 const { createFixture } = require('./smoke-fixture.cjs');
 const keyboard = require('./keyboard-shortcuts-contract.cjs');
 
-module.exports = async function smoke({ window, store, vault, terminals, files, identities, emit, finish }) {
+module.exports = async function smoke({ window, store, vault, terminals, files, identities, emit, finish, saveOpenTabs }) {
   const output = path.resolve(process.env.ASTRA_SMOKE_OUTPUT || path.join(__dirname, '..', '..', 'dist', 'windows', 'validation'));
   fs.mkdirSync(output, { recursive: true });
   const report = { platform: process.platform, electron: process.versions.electron, packaged: require('electron').app.isPackaged, checks: [], result: 'RUNNING' };
@@ -60,6 +60,48 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
     window.webContents.setBackgroundThrottling(false);
     await until(() => run('Boolean(window.__astraTest?.ready)'), 'Renderer did not initialize');
     window.show(); window.focus();
+    const tabContract = require('./tab-contracts.cjs');
+    await check('empty launch, saved workspace, live connection dots and direct tab close', async () => {
+      const fixture = tabContract.startup;
+      assert.equal(await run('__astraTest.state.panes.size > 0'), fixture.local_default);
+      assert.equal(await run('__astraTest.state.rememberTabs'), fixture.remember_default);
+      const profile = { id: fixture.saved_id, protocol: 'local', name: fixture.initial_name };
+      await run(`astra.invoke('session:save', {record:${JSON.stringify(profile)}})`);
+      const dot = `document.querySelector('[data-sidebar-id="session:${profile.id}"] .status-dot')`;
+      assert.equal(await run(dot + '.hidden'), true);
+      const first = await run(`__astraTest.openSession(${JSON.stringify(profile)}).then(item=>item.id)`);
+      assert.equal(await run(`${dot}.classList.contains('running') && !${dot}.hidden`), true);
+      const added = await run(`__astraTest.openSession({protocol:'local',name:${JSON.stringify(fixture.second_pane)}},
+        {groupId:__astraTest.state.activeGroup,orientation:'vertical'}).then(item=>item.id)`);
+      const last = await run(`__astraTest.openSession({protocol:'local',name:${JSON.stringify(fixture.last_tab)}}).then(item=>item.id)`);
+      await run(`__astraTest.focusPane(${JSON.stringify(added)}); __astraTest.action('settings')`);
+      await until(() => run('!!document.querySelector("dialog[open]")'), 'Settings dialog missing');
+      await run(`(()=>{const d=document.querySelector('dialog[open]');
+        [...d.querySelectorAll('label')].find(label=>label.textContent.includes('Запоминать вкладки')).querySelector('input').click();
+        d.querySelector('.primary').click()})()`);
+      await until(() => run('__astraTest.state.rememberTabs && !document.querySelector("dialog[open]")'), 'Remember tabs setting did not save');
+      await saveOpenTabs();
+      const saved = (await run('astra.invoke("bootstrap")')).workspace;
+      assert.deepEqual(saved.tabs[0].panes[0], { session: profile.id });
+      assert.equal(saved.tabs[0].active, 1);
+      assert.equal(saved.active, 0);
+
+      await run(`document.querySelector('.tab.active [aria-label="Закрыть вкладку"]').click()`);
+      await until(() => !terminals.get(first) && !terminals.get(added), 'Tab cross did not close both panes');
+      assert.equal(await run('!!document.querySelector("dialog[open]")'), false);
+      assert.equal(await run(dot + '.hidden'), true);
+      await run(`__astraTest.closePane(${JSON.stringify(last)},false)`);
+      await run(`astra.invoke('session:save', {record:${JSON.stringify({...profile, name:fixture.updated_name})}})`);
+      await run(`__astraTest.restoreOpenTabs(${JSON.stringify(saved)})`);
+      assert.deepEqual(await run(`__astraTest.state.groups.map(g=>g.panes.map(id=>__astraTest.state.panes.get(id).profile.name))`),
+        [[fixture.updated_name, fixture.second_pane], [fixture.last_tab]]);
+      assert.equal(await run('__astraTest.state.groups[0].orientation'), 'vertical');
+      assert.equal(await run('__astraTest.state.panes.get(__astraTest.state.active).profile.name'), fixture.second_pane);
+      await run(`Promise.all([...__astraTest.state.panes.keys()].map(id=>__astraTest.closePane(id,false)))`);
+      await run(`astra.invoke('session:delete',{id:${JSON.stringify(profile.id)}})`);
+      await run(`astra.invoke('app:rememberTabs',{remember:false}).then(value=>{__astraTest.state.rememberTabs=value;})`);
+    });
+    await run('__astraTest.openSession()');
     const initial = await run('[...__astraTest.state.panes.keys()][0]');
     await check('local desktop URL and logging settings need no web server', async () => {
       assert.equal(await run('location.href'), require('./local-ui.cjs').entryURL);
@@ -606,6 +648,15 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
       terminals.write(initial, 'exit\r');
       await until(() => terminals.get(initial)?.status === 'exited', 'PowerShell did not exit');
       assert.equal(terminals.write(initial, 'ignored'), false);
+      const generation = terminals.get(initial).generation;
+      await key(tabContract.ended_session.restart_key, tabContract.ended_session.restart_key);
+      await until(() => terminals.get(initial)?.status === 'running' && terminals.get(initial).generation > generation, 'R did not reconnect the finished terminal');
+      await until(async () => (await snapshot(initial)).includes('PS '), 'Reconnected PowerShell missing');
+      terminals.write(initial, 'exit\r');
+      await until(() => terminals.get(initial)?.status === 'exited', 'Reconnected PowerShell did not exit');
+      await key(tabContract.ended_session.close_key);
+      await until(() => !terminals.get(initial), 'Another key did not close the finished terminal');
+      assert.ok(terminals.get(first) && terminals.get(second));
       for (const record of terminals.list()) terminals.close(record.id);
     });
     await require('./smoke-tab-management.cjs')({ window, terminals, files, run, until, delay, check });

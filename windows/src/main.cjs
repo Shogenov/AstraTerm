@@ -24,6 +24,7 @@ const { mobaConfigPaths, readMobaCredentials, planMobaLinks } = require('./backe
 const { UpdateController } = require('./update-ui.cjs');
 const { BackupDialogs } = require('./backup-ui.cjs');
 const { activeProfile } = require('./backend/backup.cjs');
+const { readWorkspace, captureWorkspace } = require('./backend/startup-tabs.cjs');
 
 // DirectComposition paints above foreign native child HWNDs even with HWND_TOP.
 // Keep GPU acceleration; use a redirection surface so the embedded RDP child is visible.
@@ -44,6 +45,9 @@ let diagnosticLog;
 let sidebarPath;
 let appearancePath;
 let appearanceWrites = Promise.resolve();
+let workspacePath;
+let workspacePreferences;
+let workspaceWrites = Promise.resolve();
 let backups;
 let store;
 let terminals;
@@ -301,9 +305,30 @@ async function writeAtomic(filename, contents) {
   } finally { await fs.promises.unlink(temporary).catch(() => {}); }
 }
 
+function persistWorkspace(document) {
+  workspaceWrites = workspaceWrites.catch(() => {}).then(async () => {
+    await writeAtomic(workspacePath, JSON.stringify(document));
+    workspacePreferences = document;
+  });
+  return workspaceWrites;
+}
+
+async function saveOpenTabs() {
+  await workspaceWrites.catch(() => {});
+  if (!workspacePreferences?.remember || !window || window.isDestroyed()) return;
+  const layout = await Promise.race([
+    window.webContents.executeJavaScript('snapshotOpenTabs()'),
+    new Promise(resolve => setTimeout(resolve, 2000).unref())
+  ]);
+  const getProfile = id => (terminals.get(id) || rdp.get(id))?.profile;
+  const saved = new Set(store.snapshot().sessions.map(profile => profile.id));
+  await persistWorkspace(captureWorkspace(layout, getProfile, saved));
+}
+
 async function finish(exitCode = 0) {
   if (finishing) return;
   finishing = true;
+  try { await saveOpenTabs(); } catch { diagnosticLog?.write('warning', 'workspace.save-failed'); }
   vault?.lock();
   for (const id of imports.keys())discardImport(id);
   allowClose = true;
@@ -431,7 +456,7 @@ async function openSession(args) {
 async function call(method, args) {
   switch (method) {
     case 'host:stats': return hostStats.read(args.id);
-    case 'bootstrap': return { store: store.snapshot(), identities: identities.list(), vault: vaultState(), platform: process.platform, home: os.homedir(), version: app.getVersion(), appData: profileDirectory, terminals: [...terminals.list(),...rdp.list()], collapsedFolders: [...collapsedFolders], theme: nativeTheme.themeSource, smoke: IS_SMOKE };
+    case 'bootstrap': return { store: store.snapshot(), identities: identities.list(), vault: vaultState(), platform: process.platform, home: os.homedir(), version: app.getVersion(), appData: profileDirectory, terminals: [...terminals.list(),...rdp.list()], collapsedFolders: [...collapsedFolders], theme: nativeTheme.themeSource, workspace: workspacePreferences, smoke: IS_SMOKE };
     case 'backup:create': return backups.run(true);
     case 'backup:restore': return backups.run(false);
     case 'sidebar:collapse': {
@@ -635,6 +660,11 @@ async function call(method, args) {
     case 'tunnel:stop': return tunnels.stop(args.id);
     case 'tunnel:list': return tunnels.list();
     case 'app:updates': void updates.check(); return true;
+    case 'app:rememberTabs': {
+      if (typeof args.remember !== 'boolean') throw Error('Некорректная настройка вкладок.');
+      if (args.remember !== workspacePreferences.remember) await persistWorkspace({ remember: args.remember, tabs: [], active: 0 });
+      return workspacePreferences.remember;
+    }
     case 'app:theme': {
       const { theme } = args;
       if (!['dark', 'light'].includes(theme)) throw new Error('Неизвестная тема оформления.');
@@ -689,6 +719,8 @@ function appBackgroundColor() {
 
 async function createWindow() {
   profileDirectory = activeProfile(appDirectory);
+  workspacePath = path.join(profileDirectory, 'workspace.json');
+  workspacePreferences = readWorkspace(workspacePath);
   sidebarPath = path.join(profileDirectory, 'sidebar.json');
   appearancePath = path.join(profileDirectory, 'appearance.json');
   nativeTheme.themeSource = 'dark';
@@ -770,7 +802,7 @@ async function createWindow() {
     return { results };
   });
   if (IS_SMOKE) window.webContents.once('did-finish-load', () => {
-    Promise.resolve().then(() => require(IS_WEBSITE?'./website-capture.cjs':IS_RDP_TEST?'./smoke-rdp.cjs':'./smoke.cjs')({ window, store, terminals, rdp, vault, files, identities, trust, tunnels, prompt, emit, finish }))
+    Promise.resolve().then(() => require(IS_WEBSITE?'./website-capture.cjs':IS_RDP_TEST?'./smoke-rdp.cjs':'./smoke.cjs')({ window, store, terminals, rdp, vault, files, identities, trust, tunnels, prompt, emit, finish, saveOpenTabs }))
       .catch(() => { process.stderr.write('ASTRATERM_WINDOWS_SMOKE_FAILED\n'); void finish(1); });
   });
   await window.loadURL(entryURL);

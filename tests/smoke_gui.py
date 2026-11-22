@@ -50,7 +50,7 @@ def main():
         profile = default_session("ssh")
         profile.update(name="Smoke SSH", host="127.0.0.1", username="test", group="Проверка")
         store.upsert(profile)
-        window = MainWindow(store)
+        window = MainWindow(store, start_local=True)
         try:
             pane = window.active_pane()
             wait_for(lambda: pane.pid is not None)

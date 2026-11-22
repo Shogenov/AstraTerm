@@ -9,9 +9,7 @@ module.exports=async function({window,store,terminals,identities,files,finish}){
   try{
     await until(()=>run('Boolean(window.__astraTest?.ready)'));
     window.setSize(1440,900);window.center();window.show();
-    const initial=await run('[...__astraTest.state.panes.keys()][0]');
     await until(()=>!files.busy);
-    await run(`__astraTest.closePane(${JSON.stringify(initial)},false)`);
     const opened=[];
     for(const [index,name]of ['web-01','db-01','stage-01'].entries()){
       const banner=`\x1b[2J\x1b[H\x1b[38;5;114mdemo@${name}\x1b[0m ~\r\n\r\n$ hostname\r\n${name}.example.test\r\n\r\n$ systemctl status ${index===1?'postgresql':'nginx'}\r\n\x1b[38;5;114m● ${index===1?'postgresql':'nginx'}.service\r\n  Active: active (running)\x1b[0m\r\n\r\n$ ls -lh /srv/app\r\n\x1b[38;5;110mbackups/  config/  logs/\x1b[0m\r\nREADME.md  deploy.sh\r\n\r\n\x1b[38;5;114mdemo@${name}\x1b[0m:~$ `;

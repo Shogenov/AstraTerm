@@ -88,7 +88,8 @@ class TerminalPane(Gtk.Box):
         self.multiexec_check.connect("toggled", self._selection_changed)
         bar.pack_start(self.multiexec_check, False, False, 0)
         close_button = Gtk.Button()
-        close_button.add(Gtk.Image.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU))
+        from .ui_helpers import action_image
+        close_button.add(action_image("close"))
         close_button.set_relief(Gtk.ReliefStyle.NONE)
         close_button.get_style_context().add_class("flat")
         close_button.get_style_context().add_class("pane-close")
@@ -146,6 +147,7 @@ class TerminalPane(Gtk.Box):
         self.terminal.connect("window-title-changed", self._title_changed)
         self.terminal.connect("current-directory-uri-changed", self._directory_changed)
         self.terminal.connect("focus-in-event", self._focused)
+        self.terminal.connect("key-press-event", self._ended_key)
         self.terminal.connect("button-press-event", self._button_press)
         self.terminal.connect("bell", lambda *_: self.on_status("Звуковой сигнал терминала"))
         GLib.idle_add(self.start)
@@ -239,14 +241,25 @@ class TerminalPane(Gtk.Box):
         self.directory_report = None
         self.pid = None
         self.connection_generation += 1
-        self.on_connection(self)
         self.exited = True
+        self.on_connection(self)
         self.exit_code = os.WEXITSTATUS(status) if os.WIFEXITED(status) else 128 + os.WTERMSIG(status)
         if not self.closed:
             self.state_label.set_text("ИСТОРИЯ · {}".format(self.exit_code) if self.input_retired else
                                       "ЗАВЕРШЕНО · {}".format(self.exit_code))
-            terminal.feed(("\r\n[Сессия завершена, код {}. Нажмите «Переподключить» в меню вкладки.]\r\n".format(self.exit_code)).encode("utf-8"))
+            message = "[Сессия завершена, код {}. R — переподключиться, другая клавиша — закрыть.]".format(self.exit_code)
+            terminal.feed(("\r\n" + message + "\r\n").encode("utf-8"))
             self.on_status("Сессия завершена: " + self.profile.get("name", "Terminal"))
+
+    def _ended_key(self, _terminal, event):
+        if self.closed or not self.exited or event.is_modifier:
+            return False
+        if (Gdk.keyval_to_lower(event.keyval) in (Gdk.KEY_r, Gdk.KEY_Cyrillic_ka) and
+                not event.state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK | Gdk.ModifierType.SUPER_MASK)):
+            self.restart(ask=False)
+        elif self.on_close:
+            self.on_close(self)
+        return True
 
     def _close_master(self):
         if self._drain_fd is not None:
@@ -517,14 +530,28 @@ class TerminalWorkspace(Gtk.Box):
 
         balance(self.get_children()[0])
 
+    def capture_layout(self, root=None):
+        def snapshot(widget):
+            if widget in self.panes:
+                return self.panes.index(widget)
+            horizontal = widget.get_orientation() == Gtk.Orientation.HORIZONTAL
+            extent = widget.get_allocated_width() if horizontal else widget.get_allocated_height()
+            ratio = max(.01, min(.99, widget.get_position() / float(extent))) if extent > 1 else .5
+            return ['horizontal' if horizontal else 'vertical', ratio,
+                    snapshot(widget.get_child1()), snapshot(widget.get_child2())]
+
+        return snapshot(root if root is not None else self.get_children()[0])
+
     def restore_layout(self,layout):
-        """Arrange newly duplicated panes using a captured split tree."""
+        """Arrange new panes using a captured split tree."""
         root=self.get_children()[0]
         for pane in self.panes:pane.get_parent().remove(pane)
         if root not in self.panes:self.remove(root);root.destroy()
         def build(node):
             if isinstance(node,int):return self.panes[node]
-            orientation,ratio,left,right=node;split=Gtk.Paned(orientation=orientation)
+            direction, ratio, left, right = node
+            orientation = Gtk.Orientation.HORIZONTAL if direction == 'horizontal' else Gtk.Orientation.VERTICAL
+            split = Gtk.Paned(orientation=orientation)
             split.pack1(build(left),True,False);split.pack2(build(right),True,False)
             def position(widget,allocation):
                 size=allocation.width if orientation==Gtk.Orientation.HORIZONTAL else allocation.height

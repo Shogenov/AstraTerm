@@ -1,5 +1,15 @@
 {
   "description": "Drop moves the entire source tab to the right of the target, preserving terminal handles; middle closes the whole tab without confirmation.",
+  "startup": {
+    "remember_default": false,
+    "local_default": false,
+    "saved_id": "workspace-saved-fixture",
+    "initial_name": "Первый сохранённый терминал",
+    "updated_name": "Обновлённый терминал",
+    "second_pane": "Локальная панель",
+    "last_tab": "Последняя вкладка"
+  },
+  "ended_session": {"restart_key": "r", "close_key": "Escape", "other_panes_unchanged": true},
   "rangeSelection": {
     "text": "0123456789",
     "columns": [2, 7],

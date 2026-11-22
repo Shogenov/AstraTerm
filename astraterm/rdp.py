@@ -84,7 +84,9 @@ class RdpPane(Gtk.Box):
         bar.pack_start(self.title_label, True, True, 4)
         self.state_label = Gtk.Label(label='RDP')
         bar.pack_start(self.state_label, False, False, 4)
-        close = Gtk.Button.new_from_icon_name('window-close-symbolic', Gtk.IconSize.MENU)
+        from .ui_helpers import action_image
+        close = Gtk.Button()
+        close.add(action_image('close'))
         close.set_relief(Gtk.ReliefStyle.NONE)
         close.connect('clicked', lambda *_: self.on_close(self) if self.on_close else None)
         bar.pack_end(close, False, False, 0)

@@ -1,0 +1,27 @@
+// Generated from shared/icons.json.
+const ICONS = Object.freeze({
+  "terminal": "<path d=\"m4 6 5 5-5 5m8 0h7\"/>",
+  "split": "<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M12 4v16\"/>",
+  "grid": "<rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/>",
+  "panelLeft": "<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M9 4v16m-4-12h2m-2 4h2m-2 4h2\"/>",
+  "panelRight": "<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M15 4v16m2-12h2m-2 4h2m-2 4h2\"/>",
+  "menu": "<path d=\"M4 6h16M4 12h16M4 18h16\"/>",
+  "detach": "<path d=\"M14 3h7v7m0-7L10 14M10 3H3v18h18v-7\"/>",
+  "close": "<path d=\"m6 6 12 12M18 6 6 18\"/>",
+  "folder": "<path d=\"M3 7V5h6l2 3h10v12H3z\"/>",
+  "fileFolder": "<path fill=\"#e2aa45\" stroke=\"none\" d=\"M2 6a2 2 0 0 1 2-2h5l3 3h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z\"/><path fill=\"#ffd273\" stroke=\"none\" d=\"M3 10h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/>",
+  "folderPlus": "<path d=\"M3 7V5h6l2 3h10v12H3zM12 10v7m-3-3.5h6\"/>",
+  "file": "<path d=\"M5 3h9l5 5v13H5zM14 3v6h5\"/>",
+  "ssh": "<circle cx=\"8\" cy=\"9\" r=\"4\"/><path d=\"m11 12 9 9m-3-3 3-3m-6 0 3-3\"/>",
+  "desktop": "<rect x=\"3\" y=\"4\" width=\"18\" height=\"13\" rx=\"2\"/><path d=\"M8 21h8m-4-4v4\"/>",
+  "linux": "<path fill=\"#18232d\" stroke=\"#8194a5\" d=\"M12 2c-4 0-5 3-5 7 0 3-4 5-4 9 0 2 4 3 9 3s9-1 9-3c0-4-4-6-4-9 0-4-1-7-5-7z\"/><g stroke=\"none\"><ellipse cx=\"12\" cy=\"14\" rx=\"5.2\" ry=\"6.4\" fill=\"#fff4e0\"/><ellipse cx=\"8\" cy=\"20\" rx=\"4.4\" ry=\"2.4\" fill=\"#f8bb45\"/><ellipse cx=\"16\" cy=\"20\" rx=\"4.4\" ry=\"2.4\" fill=\"#f8bb45\"/><ellipse cx=\"10\" cy=\"6.6\" rx=\"1.7\" ry=\"2.3\" fill=\"#fff4e0\"/><ellipse cx=\"14\" cy=\"6.6\" rx=\"1.7\" ry=\"2.3\" fill=\"#fff4e0\"/><circle cx=\"10.5\" cy=\"7\" r=\".8\" fill=\"#18232d\"/><circle cx=\"13.5\" cy=\"7\" r=\".8\" fill=\"#18232d\"/><path fill=\"#f8bb45\" d=\"M8.5 9.8 12 8l3.5 1.8L12 12z\"/></g>",
+  "up": "<path d=\"m5 14 7-7 7 7\"/>",
+  "down": "<path d=\"m5 10 7 7 7-7\"/>",
+  "refresh": "<path d=\"M20 8a8 8 0 1 0 0 8M20 3v6h-6\"/>",
+  "edit": "<path d=\"m4 16-1 5 5-1L21 7l-4-4zM14 6l4 4\"/>",
+  "trash": "<path d=\"M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7\"/>",
+  "upload": "<path d=\"M12 17V3m-5 5 5-5 5 5M4 16v5h16v-5\"/>",
+  "download": "<path d=\"M12 3v14m-5-5 5 5 5-5M4 16v5h16v-5\"/>",
+  "plus": "<path d=\"M12 5v14M5 12h14\"/>",
+  "arrow": "<path d=\"M4 12h15m-5-5 5 5-5 5\"/>"
+});

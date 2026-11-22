@@ -3,32 +3,6 @@
 const $ = (id) => document.getElementById(id);
 const api = window.astra;
 const DEFAULT_FONT_SIZE = 14;
-const ICONS = {
-  terminal: '<path d="m4 6 5 5-5 5m8 0h7"/>',
-  split:
-    '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>',
-  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
-  panelLeft: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-4-12h2m-2 4h2m-2 4h2"/>',
-  panelRight: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16m2-12h2m-2 4h2m-2 4h2"/>',
-  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
-  detach: '<path d="M14 3h7v7m0-7L10 14M10 3H3v18h18v-7"/>',
-  close: '<path d="m6 6 12 12M18 6 6 18"/>',
-  folder: '<path d="M3 7V5h6l2 3h10v12H3z"/>',
-  fileFolder: '<path fill="#e2aa45" stroke="none" d="M2 6a2 2 0 0 1 2-2h5l3 3h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/><path fill="#ffd273" stroke="none" d="M3 10h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
-  folderPlus: '<path d="M3 7V5h6l2 3h10v12H3zM12 10v7m-3-3.5h6"/>',
-  file: '<path d="M5 3h9l5 5v13H5zM14 3v6h5"/>',
-  ssh: '<circle cx="8" cy="9" r="4"/><path d="m11 12 9 9m-3-3 3-3m-6 0 3-3"/>',
-  desktop:
-    '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/>',
-  linux: '<path fill="#18232d" stroke="#8194a5" d="M12 2c-4 0-5 3-5 7 0 3-4 5-4 9 0 2 4 3 9 3s9-1 9-3c0-4-4-6-4-9 0-4-1-7-5-7z"/><g stroke="none"><ellipse cx="12" cy="14" rx="5.2" ry="6.4" fill="#fff4e0"/><ellipse cx="8" cy="20" rx="4.4" ry="2.4" fill="#f8bb45"/><ellipse cx="16" cy="20" rx="4.4" ry="2.4" fill="#f8bb45"/><ellipse cx="10" cy="6.6" rx="1.7" ry="2.3" fill="#fff4e0"/><ellipse cx="14" cy="6.6" rx="1.7" ry="2.3" fill="#fff4e0"/><circle cx="10.5" cy="7" r=".8" fill="#18232d"/><circle cx="13.5" cy="7" r=".8" fill="#18232d"/><path fill="#f8bb45" d="M8.5 9.8 12 8l3.5 1.8L12 12z"/></g>',
-  up: '<path d="m5 14 7-7 7 7"/>',
-  down: '<path d="m5 10 7 7 7-7"/>',
-  refresh: '<path d="M20 8a8 8 0 1 0 0 8M20 3v6h-6"/>',
-  edit: '<path d="m4 16-1 5 5-1L21 7l-4-4zM14 6l4 4"/>',
-  trash: '<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>',
-  upload: '<path d="M12 17V3m-5 5 5-5 5 5M4 16v5h16v-5"/>',
-  download: '<path d="M12 3v14m-5-5 5 5 5-5M4 16v5h16v-5"/>',
-};
 function icon(name) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
@@ -63,6 +37,7 @@ function iconButton(name, title, callback) {
 }
 const state = {
   theme: "dark",
+  rememberTabs: false,
   store: { sessions: [], groups: [], macros: [], tunnels: [] },
   identities: { profiles: [], keys: [] },
   panes: new Map(),
@@ -297,6 +272,7 @@ function renderSessions() {
     row.append(
       icon(profileIcon(profile)),
       el("span", { class: "session-name", text: profile.name }),
+      el("span", { class: "status-dot", hidden: true, role: "img" }),
     );
     row.addEventListener("click", () => {
       row.focus({ preventScroll: true });
@@ -339,8 +315,24 @@ function renderSessions() {
       appendSession(profile, level, parent);
   }
   appendContents("", 0, root);
+  syncSessionIndicators();
   if (focused) Array.from(root.querySelectorAll("[data-sidebar-id]"))
     .find(row => row.dataset.sidebarId === focused)?.focus({ preventScroll: true });
+}
+function syncSessionIndicators() {
+  const sessions = new Map();
+  for (const pane of state.panes.values()) {
+    const id = pane.profile.id;
+    sessions.set(id, sessions.get(id) || pane.status === "running");
+  }
+  for (const row of document.querySelectorAll('.session-row[data-sidebar-id]')) {
+    const dot = row.querySelector('.status-dot');
+    const id = row.dataset.sidebarId.slice('session:'.length);
+    const running = Boolean(sessions.get(id));
+    dot.hidden = !sessions.has(id);
+    dot.classList.toggle('running', running);
+    dot.setAttribute('aria-label', running ? 'Подключено' : 'Соединение неактивно');
+  }
 }
 function selectGroup(id) {
   const group = state.groups.find((item) => item.id === id);
@@ -532,6 +524,7 @@ function adoptPaneView(pane,container) {
 }
 let revealedTab = null;
 function renderTabs() {
+  syncSessionIndicators();
   const tabs = $("tabs");
   tabs.hidden = state.overview;
   // Keep the native drag source/target alive through asynchronous title updates.
@@ -560,7 +553,7 @@ function renderTabs() {
       }),
       iconButton("close", "Закрыть вкладку", (event) => {
         event.stopPropagation();
-        closeGroup(group.id).catch(showError);
+        closeGroup(group.id, false).catch(showError);
       }),
     );
     tab.addEventListener("click", () => selectGroup(group.id));
@@ -834,9 +827,10 @@ function setTheme(theme) {
 
 function addPane(record) {
   if (state.panes.has(record.id)) return state.panes.get(record.id);
-  if (record.profile.protocol === "rdp") return addRdpPane(record);
   const token = record.profile?._uiOpenToken;
   const pending = state.pendingOpens.get(token) || {};
+  pending.createdId = record.id;
+  if (record.profile.protocol === "rdp") return addRdpPane(record);
   let group = state.groups.find((item) => item.id === pending.groupId);
   if (!group) {
     group = {
@@ -935,6 +929,17 @@ function addPane(record) {
   term.textarea?.addEventListener("focus", () => focusPane(pane.id, false));
   term.attachCustomKeyEventHandler((event) => {
     if (event.type === "keydown") {
+      if (pane.status === "exited" && !["Shift", "Control", "Alt", "AltGraph", "Meta", "CapsLock"].includes(event.key)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat || pane.endingAction) return false;
+        const restart = (event.code === 'KeyR' || event.key.toLowerCase() === 'r') &&
+          !(event.ctrlKey || event.altKey || event.metaKey);
+        pane.endingAction = true;
+        (restart ? reconnect(pane.id) : closePane(pane.id, false))
+          .catch(showError).finally(() => { pane.endingAction = false; });
+        return false;
+      }
       if (shortcut(event)) return false;
       armHuman(pane);
     }
@@ -994,6 +999,7 @@ async function openSession(
   try {
     const record = await api.invoke("session:open", {
       profile,
+      ...(options.savedId ? { id: options.savedId } : {}),
       ...(options.duplicateId?{duplicateId:options.duplicateId}:{}),
       openToken: token,
       dimensions: { cols: 100, rows: 30 },
@@ -1005,6 +1011,42 @@ async function openSession(
   } finally {
     state.pendingOpens.delete(token);
   }
+}
+
+function snapshotOpenTabs() {
+  return {
+    tabs: state.groups.map(group => ({ panes: [...group.panes], orientation: group.orientation,
+      active: group.panes.indexOf(group.active) })),
+    active: state.groups.findIndex(group => group.id === state.activeGroup),
+  };
+}
+
+async function restoreOpenTabs(workspace) {
+  if (!workspace?.remember) return;
+  const restored = [];
+  for (const [index, tab] of workspace.tabs.entries()) {
+    const ids = [];
+    let groupId;
+    for (const [position, reference] of tab.panes.entries()) {
+      if (!reference || (reference.session && !state.store.sessions.some(item => item.id === reference.session))) continue;
+      const options = { savedId: reference.session, groupId, orientation: tab.orientation };
+      try {
+        await openSession(reference.profile, options);
+      } catch (error) { showError(error); }
+      const created = options.createdId;
+      if (!created) continue;
+      ids[position] = created;
+      groupId ||= state.groups.find(group => group.panes.includes(created))?.id;
+    }
+    const id = ids[tab.active] || ids.find(Boolean);
+    const group = state.groups.find(group => group.id === groupId);
+    if (group && group.panes.includes(id)) {
+      group.active = id;
+      restored[index] = id;
+    }
+  }
+  const previous = restored[workspace.active];
+  if (previous) focusPane(previous);
 }
 async function closePane(id, ask = true) {
   const pane = state.panes.get(id);
@@ -2910,9 +2952,14 @@ async function settingsDialog() {
   level.disabled = !current.enabled;
   toggle.input.addEventListener("change", () => { level.disabled = !toggle.input.checked; });
   dialog.body.prepend(el("p", { class: "dialog-description", text: current.filename }));
+  const remember = checkbox("Запоминать вкладки при закрытии", state.rememberTabs);
+  remember.wrapper.classList.add("full");
+  dialog.grid.append(remember.wrapper);
   dialog.submit(async () => {
     await api.invoke("logging:save", { enabled: toggle.input.checked, level: level.value });
     if (theme.value !== state.theme) setTheme(await api.invoke("app:theme", { theme: theme.value }));
+    if (remember.input.checked !== state.rememberTabs)
+      state.rememberTabs = await api.invoke("app:rememberTabs", { remember: remember.input.checked });
     toast("Настройки сохранены");
   });
   dialog.show();
@@ -3254,9 +3301,10 @@ function handleEvent(event) {
     return;
   }
   if (type === "terminal:exit") {
+    if (payload.generation !== pane.generation) return;
     router.update(pane.id, pane.generation, false);
     pane.term.writeln(
-      `\r\n\x1b[90m[Сессия завершена${payload.exitCode == null ? "" : ", код " + payload.exitCode}. Переподключение — в меню терминала.]\x1b[0m`,
+      `\r\n\x1b[90m[Сессия завершена${payload.exitCode == null ? "" : ", код " + payload.exitCode}. R — переподключиться, другая клавиша — закрыть.]\x1b[0m`,
     );
     renderTabs();
     renderMulti();
@@ -3438,6 +3486,7 @@ async function boot() {
   api.onEvent(handleEvent);
   const initial = await api.invoke("bootstrap");
   state.bootstrap = initial;
+  state.rememberTabs = Boolean(initial.workspace?.remember);
   setTheme(initial.theme === "light" ? "light" : "dark");
   state.store = initial.store;
   state.identities = initial.identities;
@@ -3446,7 +3495,7 @@ async function boot() {
   state.files.localPath = initial.home;
   renderSessions();
   for(const record of initial.terminals || [])addPane(record);
-  await openSession();
+  renderLayout();
   await syncFiles();
   if (initial.smoke)
     window.__astraTest = {
@@ -3476,8 +3525,10 @@ async function boot() {
       importDialog,
       vaultDialog,
       selectGroup,
+      restoreOpenTabs,
       ready: true,
     };
   else if (!initial.identities.configured) await profilesDialog(true);
+  await restoreOpenTabs(initial.workspace);
 }
 boot().catch(showError);

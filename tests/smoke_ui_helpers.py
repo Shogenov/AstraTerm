@@ -17,7 +17,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk
 
 from astraterm.ui_helpers import (TabStrip, protocol_icon, group_icon,
-                                 rename_image, _widget_root_origin)
+                                 action_image, _widget_root_origin)
 
 
 def pump(seconds=0.08):
@@ -101,10 +101,11 @@ def main():
             icon = protocol_icon(protocol)
             assert theme.has_icon(icon), "Missing %s icon: %s" % (protocol, icon)
         assert theme.has_icon(group_icon()) and theme.has_icon(group_icon(True))
-        pencil = rename_image()
-        assert pencil.get_storage_type() == Gtk.ImageType.PIXBUF, "Inline pencil SVG did not render"
-        assert pencil.get_pixbuf().get_width() == 20
-        print("PASS folder / SSH / RDP theme icons and explicit pencil rendering", flush=True)
+        icons = [action_image(name).get_pixbuf() for name in
+                 ('up', 'refresh', 'upload', 'download', 'folderPlus', 'edit', 'trash')]
+        assert all(icon.get_width() == 16 for icon in icons)
+        assert len({bytes(icon.get_pixels()) for icon in icons}) == len(icons)
+        print("PASS folder, SSH, RDP and shared SFTP toolbar icons render", flush=True)
         print("UI_HELPERS_SMOKE_OK", flush=True)
     finally:
         window.destroy()

@@ -11,17 +11,17 @@ class CredentialController(object):
     def __init__(self, window, vault):
         self.window = window; self.vault = vault; self._waiting = []; self._busy = False
 
-    def ensure(self, callback, create=False):
+    def ensure(self, callback, create=False, on_failure=None):
         self.vault.reload_if_changed()
         if self.vault.unlocked:
             callback(); return
-        self._waiting.append(callback)
+        self._waiting.append((callback, on_failure))
         if self._busy: return
         self._busy = True
         new = not self.vault.exists
         if new and not create:
-            self._waiting = []; self._busy = False
-            error(self.window, 'Хранилище не создано', 'Сначала импортируйте файл паролей.'); return
+            error(self.window, 'Хранилище не создано', 'Сначала импортируйте файл паролей.')
+            self._cancel_waiting(); return
         dialog = Gtk.Dialog(title='Создать хранилище' if new else 'Разблокировать хранилище', transient_for=self.window, modal=True)
         dialog.add_buttons('Отмена', Gtk.ResponseType.CANCEL, 'Продолжить', Gtk.ResponseType.OK)
         dialog.set_default_response(Gtk.ResponseType.OK)
@@ -36,34 +36,45 @@ class CredentialController(object):
         dialog.show_all(); result = dialog.run(); master = entry.get_text(); same = master == repeated.get_text()
         entry.set_text(''); repeated.set_text(''); dialog.destroy()
         if result != Gtk.ResponseType.OK:
-            self._waiting = []; self._busy = False; return
+            self._cancel_waiting(); return
         if new and not same:
-            self._waiting = []; self._busy = False; error(self.window,'Мастер-пароли не совпадают'); return
+            error(self.window,'Мастер-пароли не совпадают'); self._cancel_waiting(); return
         self.window.set_status('Разблокировка хранилища…')
         def worker():
             message = None
             try: self.vault.unlock(master, create=create)
             except Exception as exc: message = str(exc)
             def done():
-                self._busy = False; waiting = self._waiting; self._waiting = []
                 if self.window.closed:
+                    self._waiting = []; self._busy = False
                     self.vault.lock(); return False
-                if message: error(self.window,'Не удалось открыть хранилище AstraTerm',message)
+                if message:
+                    error(self.window,'Не удалось открыть хранилище AstraTerm',message)
+                    self._cancel_waiting()
                 else:
+                    self._busy = False; waiting = self._waiting; self._waiting = []
                     self.window.set_status('Хранилище разблокировано')
-                    for task in waiting:
+                    for task, unused in waiting:
                         try: task()
                         except Exception as exc: error(self.window,'Учётные данные',exc)
                 return False
             GLib.idle_add(done)
         thread = threading.Thread(target=worker); thread.daemon = True; thread.start()
 
-    def prepare(self, profile, callback):
+    def _cancel_waiting(self):
+        waiting, self._waiting, self._busy = self._waiting, [], False
+        for unused, on_failure in waiting:
+            if on_failure:
+                on_failure()
+
+    def prepare(self, profile, callback, on_failure=None):
         def ready():
             if self.window.closed: return
             try: credential = self.vault.get(profile['credential_profile'],profile.get('protocol'))
             except ValueError as exc:
                 error(self.window,'Учётные данные недоступны',exc)
+                if on_failure:
+                    on_failure()
                 return
             effective = dict(profile, username=credential['username'] or profile.get('username',''))
             if not effective.get('identity_profile'):effective['identity_profile']='system'
@@ -71,7 +82,7 @@ class CredentialController(object):
             effective['_credential_prompt'] = lambda prompt: self.answer_prompt(effective,prompt)
             effective['_credential_gate'] = self.gate
             callback(effective)
-        self.ensure(ready)
+        self.ensure(ready, on_failure=on_failure)
 
     def gate(self, callback):
         self.vault.reload_if_changed()

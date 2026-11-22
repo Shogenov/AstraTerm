@@ -8,6 +8,8 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
 
+from ._icons import ICONS
+
 
 def _theme_icon(*names):
     theme = Gtk.IconTheme.get_default()
@@ -52,9 +54,7 @@ def platform_pixbuf(protocol):
 
 
 def file_folder_pixbuf():
-    return _colored_pixbuf('file-folder',
-                           '<path fill="#e2aa45" d="M2 6a2 2 0 0 1 2-2h5l3 3h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/>'
-                           '<path fill="#ffd273" d="M3 10h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>')
+    return _colored_pixbuf('file-folder', ICONS['fileFolder'])
 
 
 def _colored_pixbuf(name, drawing):
@@ -78,49 +78,20 @@ def group_icon(expanded=False):
     return _theme_icon("folder-symbolic", "folder")
 
 
-def rename_icon():
-    return _theme_icon("document-edit-symbolic", "accessories-text-editor-symbolic",
-                       "accessories-text-editor", "gtk-edit")
-
-
-def rename_image():
-    """A recognizable pencil even when Astra's theme lacks edit-rename."""
-    drawing = b'''<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
-      <path d="M4 15.5L3 21l5.5-1L20 8.5 15.5 4z" fill="none" stroke="#d8dee9" stroke-width="1.8" stroke-linejoin="round"/>
-      <path d="M14 5.5l4.5 4.5M4 15.5L8.5 20M3 21l3-0.5-2.5-2.5z" fill="none" stroke="#78d6bd" stroke-width="1.8" stroke-linejoin="round"/>
-      <path d="M16.5 3l1-1c0.7-0.7 1.6-0.7 2.3 0l2.2 2.2c0.7 0.7 0.7 1.6 0 2.3l-1 1z" fill="#78d6bd"/>
-    </svg>'''
-    try:
-        loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
-        loader.write(drawing)
-        loader.close()
-        return Gtk.Image.new_from_pixbuf(loader.get_pixbuf())
-    except Exception:
-        return Gtk.Image.new_from_icon_name(rename_icon(), Gtk.IconSize.BUTTON)
-
-
 def action_image(name):
-    """Small consistent line icons, independent of the installed desktop theme."""
-    paths = {
-        "terminal": '<path d="m4 6 5 5-5 5m8 0h7"/>',
-        "split": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>',
-        "grid": '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
-        "panel-left": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-4-12h2m-2 4h2m-2 4h2"/>',
-        "panel-right": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16m2-12h2m-2 4h2m-2 4h2"/>',
-        "menu": '<path d="M4 6h16M4 12h16M4 18h16"/>',
-        "plus": '<path d="M12 5v14M5 12h14"/>',
-        "folder": '<path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7zM12 10v7m-3-3.5h6"/>',
-        "detach": '<path d="M14 3h7v7m0-7L10 14M10 3H3v18h18v-7"/>',
-        "close": '<path d="m6 6 12 12M18 6 6 18"/>',
-        "arrow": '<path d="M4 12h15m-5-5 5 5-5 5"/>',
-    }
-    drawing = ('<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" '
-               'viewBox="0 0 24 24"><g fill="none" stroke="#9ba8b3" stroke-width="1.65" '
-               'stroke-linecap="round" stroke-linejoin="round">' + paths[name] + '</g></svg>')
+    """Render the shared toolbar icon without relying on the desktop icon theme."""
+    drawing = ('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" '
+               'viewBox="0 0 24 24"><g fill="none" stroke="#768994" stroke-width="1.6" '
+               'stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + '</g></svg>')
     loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
     loader.write(drawing.encode("utf-8"))
     loader.close()
     return Gtk.Image.new_from_pixbuf(loader.get_pixbuf())
+
+
+def status_pixbuf(running):
+    color = "#82b99a" if running else "#db9251"
+    return _colored_pixbuf("status:" + color, '<circle cx="12" cy="12" r="4" fill="' + color + '"/>')
 
 
 def _translated(widget, parent, x=0, y=0):

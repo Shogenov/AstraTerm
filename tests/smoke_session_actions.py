@@ -1,13 +1,98 @@
 """Native duplicate/reconnect scope and newest saved settings, with real owned PTYs."""
+import json
 import os,sys,tempfile
+from pathlib import Path
 from unittest import mock
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gi
 gi.require_version('Gtk','3.0')
-from gi.repository import Gtk
+gi.require_version('Gdk','3.0')
+from gi.repository import Gdk, Gtk, GLib
 from astraterm.app import MainWindow
 from astraterm.core import SessionStore,default_session
-from smoke_multiexec import pump,wait_for
+from smoke_multiexec import key_event,pump,wait_for
+
+
+def check_startup():
+    contract = json.loads((Path(__file__).resolve().parents[1] / 'shared/contracts/tabs.json').read_text(encoding='utf-8'))
+    fixture = contract['startup']
+    with tempfile.TemporaryDirectory(prefix='astraterm-workspace-') as directory:
+        store = SessionStore(os.path.join(directory, 'sessions.json'))
+        profile = dict(default_session('local'), id=fixture['saved_id'], name=fixture['initial_name'])
+        store.upsert(profile)
+        window = MainWindow(store)
+        try:
+            window.present()
+            assert bool(window.notebook.get_n_pages()) == fixture['local_default']
+            assert window.remember_tabs == fixture['remember_default']
+            row = window._session_rows[profile['id']]
+            assert window.session_tree_store.get_value(row, 6) is None
+            first_tab = window.open_session(profile)
+            first = first_tab.active
+            wait_for(lambda: bool(first.pid), 'saved local terminal runs')
+            live_dot = window.session_tree_store.get_value(row, 6)
+            assert live_dot and live_dot == first_tab.tab_indicator.get_pixbuf()
+            first.terminal.event(key_event(first.terminal, Gdk.KEY_d, Gdk.ModifierType.CONTROL_MASK))
+            wait_for(lambda: first.exited and not first.pid, 'Ctrl+D closes the shell')
+            inactive_dot = window.session_tree_store.get_value(row, 6)
+            assert inactive_dot is not None and inactive_dot != live_dot
+            first.terminal.event(key_event(first.terminal, Gdk.keyval_from_name(contract['ended_session']['restart_key'])))
+            wait_for(lambda: bool(first.pid), 'R reconnects the ended shell')
+            assert window.session_tree_store.get_value(row, 6) == live_dot
+            first.send('exit\n')
+            wait_for(lambda: first.exited and not first.pid, 'reopened shell can exit')
+            first.terminal.event(key_event(first.terminal, Gdk.keyval_from_name(contract['ended_session']['close_key'])))
+            wait_for(lambda: window.notebook.get_n_pages() == 0, 'other key closes the disconnected tab')
+            assert window.session_tree_store.get_value(row, 6) is None
+
+            first_tab = window.open_session(profile)
+            second = window._split_ready(dict(default_session('local'), name=fixture['second_pane']),
+                                         Gtk.Orientation.VERTICAL, first_tab)
+            last = window.open_session(dict(default_session('local'), name=fixture['last_tab']))
+            pump(.25)
+            window.notebook.set_current_page(window.notebook.page_num(first_tab))
+            first_tab.active = second
+
+            def set_remember():
+                dialog = next(widget for widget in Gtk.Window.list_toplevels()
+                              if isinstance(widget, Gtk.Dialog) and widget.get_title() == 'Настройки')
+                remember = next(widget for widget in dialog.get_content_area().get_children()
+                                if isinstance(widget, Gtk.CheckButton) and widget.get_label().startswith('Запоминать'))
+                remember.set_active(True)
+                dialog.response(Gtk.ResponseType.OK)
+                return False
+
+            GLib.idle_add(set_remember)
+            window.settings()
+            assert window.remember_tabs
+            # Snapshot while the workspace is tiled, then load through normal startup.
+            window.set_tiled_view(True)
+            window._pane_focus(second)
+        finally:
+            window.shutdown()
+            window.destroy()
+            pump(.2)
+        store.upsert(dict(profile, name=fixture['updated_name']))
+        reopened = MainWindow(store)
+        try:
+            reopened.present()
+            wait_for(lambda: reopened.notebook.get_n_pages() == 2 and len(reopened.all_panes()) == 3,
+                     'saved tabs and split restored')
+            wait_for(lambda: reopened.active_pane().profile['name'] == fixture['second_pane'], 'active tab and pane restored')
+            first_tab, last = [reopened.notebook.get_nth_page(i) for i in range(2)]
+            assert [pane.profile['name'] for pane in first_tab.panes] == [fixture['updated_name'], fixture['second_pane']]
+            assert first_tab.get_children()[0].get_orientation() == Gtk.Orientation.VERTICAL
+            assert last.active.profile['name'] == fixture['last_tab']
+            close = next(button for button in last.tab_header.get_child().get_children()
+                         if button.get_tooltip_text() == 'Закрыть вкладку')
+            with mock.patch('astraterm.app.confirm', side_effect=AssertionError('tab close prompted')):
+                close.clicked()
+            assert reopened.notebook.get_n_pages() == 1
+        finally:
+            reopened.shutdown()
+            reopened.destroy()
+            pump(.2)
+    print('STARTUP_TABS_SMOKE_OK empty start, exit keys, live indicators, saved split and direct close', flush=True)
 
 def main():
     with tempfile.TemporaryDirectory(prefix='astraterm-session-actions-') as directory:
@@ -44,4 +129,6 @@ def main():
             print('SESSION_ACTIONS_SMOKE_OK duplicate tree/new PTYs/unselected / reconnect clicked tab/latest saved settings/other tab retained',flush=True)
         finally:window.shutdown();window.destroy();pump(.2)
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    main()
+    check_startup()

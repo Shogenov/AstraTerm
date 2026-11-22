@@ -12,7 +12,7 @@
 
 Релиз 0.5.3: общий native build прошёл — 58/59 Windows tests (один privilege skip), 18 GUI-проверок готового portable EXE, 132 Python-теста и шесть Linux GUI-наборов. DEB установлен поверх 0.5.2; тест жестов и меню повторён на установленном GTK/VTE-коде от обычного пользователя. Отчёты: `dist/releases/0.5.3/build-summary.json`, `windows/validation/report.json`, `linux/validation/installed-deb.json` внутри каталога релиза.
 
-В 0.6.0 добавлены импорт сессий/паролей MobaXterm с устойчивыми ссылками на профили, Termius CSV/OpenSSH config и Ásbrú YAML. Предпросмотр показывает непереносимые параметры. Пароли сохраняются отдельно под мастер-паролем и переиспользуются SSH/SFTP; обычный JSON-экспорт остаётся без секретов. Форматы, ограничения внешних клиентов и порядок работы — [импорт и хранилище](../docs/IMPORTS.md).
+Импорт поддерживает Termius CSV, OpenSSH config и Ásbrú YAML. Предпросмотр показывает непереносимые параметры, а сохранённые пароли доступны SSH и SFTP через хранилище под мастер-паролем. [Форматы импорта и хранилище](../docs/IMPORTS.md).
 
 Релиз 0.6.0 проверен в обеих целевых средах: 72/73 Windows tests (один privilege skip), 20 GUI-проверок готового portable EXE, 140 тестов Python 3.5 на Astra 1.6 и семь Linux GUI-наборов. Новый DEB установлен поверх 0.5.3; на установленном коде повторены импорт/мастер-диалоги, настоящий OpenSSH/askpass, автоматический SFTP, запись без пароля в журнале, reconnect после блокировки и жесты вкладок. Отчёты — `dist/releases/0.6.0/build-summary.json`, `windows/validation/report.json`, `linux/validation/installed-deb.json` внутри каталога релиза.
 

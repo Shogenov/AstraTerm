@@ -432,26 +432,24 @@ class FileBrowser(Gtk.Box):
 
         navigation = Gtk.Box(spacing=4)
         navigation.get_style_context().add_class("files-navigation")
-        self.up_button = self._button("go-up-symbolic", "На уровень выше", self._up)
+        self.up_button = self._button("up", "На уровень выше", self._up)
         navigation.pack_start(self.up_button, False, False, 0)
         self.path_entry = Gtk.Entry()
         self.path_entry.get_style_context().add_class("files-path")
         self.path_entry.set_placeholder_text("Путь к каталогу")
         self.path_entry.connect("activate", lambda entry: self._navigate(entry.get_text()))
         navigation.pack_start(self.path_entry, True, True, 0)
-        self.refresh_button = self._button("view-refresh-symbolic", "Обновить", self.refresh)
+        self.refresh_button = self._button("refresh", "Обновить", self.refresh)
         navigation.pack_start(self.refresh_button, False, False, 0)
         self.pack_start(navigation, False, False, 0)
 
         actions = Gtk.Box(spacing=4)
         actions.get_style_context().add_class("files-toolbar")
-        self.upload_button = self._button("go-up-symbolic", "Загрузить файл на сервер", self._upload)
-        self.download_button = self._button("go-down-symbolic", "Скачать выбранный файл", self._download)
-        self.mkdir_button = self._button("folder-new-symbolic", "Создать каталог", self._mkdir)
-        self.rename_button = self._button("edit-rename-symbolic", "Переименовать · F2", self._rename)
-        from .ui_helpers import rename_image
-        self.rename_button.set_image(rename_image())
-        self.delete_button = self._button("edit-delete-symbolic", "Удалить файл или пустой каталог", self._delete)
+        self.upload_button = self._button("upload", "Загрузить файл на сервер", self._upload)
+        self.download_button = self._button("download", "Скачать выбранный файл", self._download)
+        self.mkdir_button = self._button("folderPlus", "Создать каталог", self._mkdir)
+        self.rename_button = self._button("edit", "Переименовать · F2", self._rename)
+        self.delete_button = self._button("trash", "Удалить файл или пустой каталог", self._delete)
         self.delete_button.get_style_context().add_class("destructive-action")
         for button in (self.upload_button, self.download_button, self.mkdir_button,
                        self.rename_button, self.delete_button):
@@ -558,7 +556,9 @@ class FileBrowser(Gtk.Box):
 
     @staticmethod
     def _button(icon, tooltip, callback):
-        button = Gtk.Button.new_from_icon_name(icon, Gtk.IconSize.SMALL_TOOLBAR)
+        from .ui_helpers import action_image
+        button = Gtk.Button()
+        button.add(action_image(icon))
         button.set_relief(Gtk.ReliefStyle.NONE)
         button.get_style_context().add_class("icon-button")
         button.set_tooltip_text(tooltip)

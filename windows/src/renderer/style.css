@@ -410,19 +410,21 @@ main {
   width: 14px;
   height: 14px;
 }
-.tab .status-dot {
+.status-dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: #58646f;
   flex-shrink: 0;
 }
-.tab .status-dot.running {
+.status-dot.running {
   background: #82b99a;
 }
 .tab .status-dot.error {
   background: #df7d85;
 }
+.session-row .status-dot { background: #db9251; margin-left: 3px; }
+.session-row .status-dot.running { background: #82b99a; }
 .workspace {
   position: relative;
   min-height: 0;

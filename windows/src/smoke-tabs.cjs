@@ -57,8 +57,8 @@ module.exports = async function checkTabs({ window, terminals, run, until, delay
   await check('middle button closes an inactive split tab without confirmation', async () => {
     const records = window.__tabSmokeGroups;
     assert.equal(contracts.middle_close.confirm, false);
-    await run(`document.querySelector('[data-group-id="'+${JSON.stringify(records[0].target)}+'"] button[title="Закрыть вкладку"]').click()`);
-    await until(() => run('Boolean(document.querySelector("dialog[open]"))'), 'Ordinary close must still ask');
+    await run(`void __astraTest.tabAction('close-current', ${JSON.stringify(records[0].target)})`);
+    await until(() => run('Boolean(document.querySelector("dialog[open]"))'), 'Closing from the tab menu must still ask');
     await run('document.querySelector("dialog[open]").close()');
     await until(() => run('!document.querySelector("dialog[open]")'), 'Cancel ordinary close');
     assert.equal(await run(`__astraTest.state.groups.some(group=>group.id===${JSON.stringify(records[0].target)})`), true);

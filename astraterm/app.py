@@ -30,7 +30,8 @@ from .group_dialogs import GroupDialog
 from .vault import CredentialVault
 from .host_stats_ui import HostStatsBar
 from .import_dialogs import CredentialController
-from .ui_helpers import protocol_icon, platform_pixbuf, group_icon, TabStrip, action_image
+from .ui_helpers import protocol_icon, platform_pixbuf, group_icon, TabStrip, action_image, status_pixbuf
+from .startup_tabs import load_workspace, write_workspace, pane_reference, resolve_pane, project_layout, layout_leaves
 from .update_ui import UpdateController
 from .diagnostic_log import DiagnosticLog
 from .backup_dialogs import BackupDialogs
@@ -61,7 +62,7 @@ def action_button(icon, callback, tooltip, toggle=False):
 
 
 class MainWindow(Gtk.Window):
-    def __init__(self, store=None, initial_session=None, start_local=True,
+    def __init__(self, store=None, initial_session=None, start_local=False,
                  enable_identities=False, identity_store=None, ssh_agent=None, auto_sftp=None, backup_root=None):
         Gtk.Window.__init__(self, title="AstraTerm — терминалы и подключения")
         self.set_wmclass("astraterm", "AstraTerm")
@@ -72,6 +73,9 @@ class MainWindow(Gtk.Window):
         self.set_icon_name("utilities-terminal")
         self.store = store or SessionStore()
         directory = os.path.dirname(self.store.path)
+        self.workspace_path = os.path.join(directory, 'workspace.json')
+        startup_workspace = load_workspace(self.workspace_path)
+        self.remember_tabs = startup_workspace['remember']
         self.appearance_path = os.path.join(directory, 'appearance.json')
         self.theme = 'dark'
         try:
@@ -224,8 +228,10 @@ class MainWindow(Gtk.Window):
             self.new_local()
         self.show_all()
         if enable_identities:
-            GLib.idle_add(self._startup_identity, initial_session)
+            GLib.idle_add(self._startup_identity, initial_session, startup_workspace)
             GLib.timeout_add_seconds(15, lambda: self.updates.check(automatic=True))
+        elif not initial_session and not start_local and self.remember_tabs:
+            GLib.idle_add(self._restore_startup_tabs, startup_workspace)
 
     def _load_style(self):
         style_dir = os.path.dirname(__file__)
@@ -313,8 +319,8 @@ class MainWindow(Gtk.Window):
         self.tiles_toggle = action_button("grid", lambda widget: self.set_tiled_view(widget.get_active()),
                                            "Все терминалы разных хостов", toggle=True)
         toolbar.pack_start(self.tiles_toggle, False, False, 4)
-        self.sidebar_toggle = action_button("panel-left", self.toggle_sidebar, "Скрыть панель подключений")
-        self.files_toggle = action_button("panel-right", self.toggle_files, "Скрыть файловую панель")
+        self.sidebar_toggle = action_button("panelLeft", self.toggle_sidebar, "Скрыть панель подключений")
+        self.files_toggle = action_button("panelRight", self.toggle_files, "Скрыть файловую панель")
         for control in (self.sidebar_toggle, self.files_toggle):
             toolbar.pack_start(control, False, False, 0)
         self.multiexec_toggle = Gtk.ToggleButton(label="MultiExec")
@@ -382,7 +388,7 @@ class MainWindow(Gtk.Window):
                 pane.profile.get("protocol") not in ("rdp", "vnc", "tunnel")]
 
     def _register_pane(self, pane):
-        pane.on_reconnect=lambda current:self.reconnect_pane(current)
+        pane.on_reconnect = self.reconnect_pane
         if hasattr(pane, 'set_theme'):
             pane.set_theme(self.theme)
         self.multiexec.register(pane)
@@ -418,6 +424,7 @@ class MainWindow(Gtk.Window):
             self.multiexec.unregister(pane)
         else:
             self.multiexec.connection_changed(pane)
+        self._update_connection_indicators()
 
     def _target_changed(self, pane, active):
         if not self._selection_update:
@@ -590,13 +597,13 @@ class MainWindow(Gtk.Window):
         self.session_count.get_style_context().add_class("muted")
         self.session_count.get_style_context().add_class("count-badge")
         row.pack_start(self.session_count, False, False, 0)
-        row.pack_end(action_button("folder", self.new_group, "Создать папку подключений"), False, False, 0)
+        row.pack_end(action_button("folderPlus", self.new_group, "Создать папку подключений"), False, False, 0)
         sidebar.pack_start(row, False, False, 2)
         self.session_search = Gtk.SearchEntry()
         self.session_search.set_placeholder_text("Поиск")
         self.session_search.connect("search-changed", lambda *_: self._refresh_sessions())
         sidebar.pack_start(self.session_search, False, False, 0)
-        self.session_tree_store = Gtk.TreeStore(str, str, str, str, str, GdkPixbuf.Pixbuf)
+        self.session_tree_store = Gtk.TreeStore(str, str, str, str, str, GdkPixbuf.Pixbuf, GdkPixbuf.Pixbuf)
         self.session_tree = Gtk.TreeView(model=self.session_tree_store)
         self.session_tree.set_headers_visible(False)
         self.session_tree.get_style_context().add_class("session-list")
@@ -615,6 +622,9 @@ class MainWindow(Gtk.Window):
         column.set_cell_data_func(icon, session_icon, None)
         column.pack_start(renderer, True)
         column.add_attribute(renderer, "text", 0)
+        indicator = Gtk.CellRendererPixbuf(xpad=3)
+        column.pack_end(indicator, False)
+        column.add_attribute(indicator, "pixbuf", 6)
         self.session_tree.append_column(column)
         self.session_tree.connect("row-activated", self._session_activated)
         self.session_tree.connect("button-press-event", self._session_context)
@@ -665,15 +675,23 @@ class MainWindow(Gtk.Window):
         self._identity_jobs.add(holder[0])
         return holder[0]
 
-    def _startup_identity(self, initial_session=None):
+    def _startup_identity(self, initial_session, startup_workspace):
         if self.closed:
             return False
+
+        def open_startup():
+            if initial_session:
+                self.open_session(initial_session)
+            elif self._startup_local:
+                self.new_local()
+            elif self.remember_tabs:
+                self._restore_startup_tabs(startup_workspace)
+
         def ready(identity, failure):
             if failure is not None:
                 if not isinstance(failure, IdentityCancelled):
                     self.set_status("SSH-профиль не разблокирован: " + str(failure))
-                if self._startup_local:
-                    self.new_local()
+                open_startup()
                 return
             def opened(environment=None, failure=None):
                 if self.closed:
@@ -682,10 +700,7 @@ class MainWindow(Gtk.Window):
                     os.environ.update(environment)
                 if failure:
                     self.set_status("Не удалось подготовить ssh-agent")
-                if initial_session:
-                    self.open_session(initial_session)
-                elif self._startup_local:
-                    self.new_local()
+                open_startup()
                 if identity is not None:
                     self.set_status("SSH-профиль готов: " + identity["name"])
                 return False
@@ -722,12 +737,14 @@ class MainWindow(Gtk.Window):
             raise ValueError("SSH-профиль недоступен. Выберите профиль ключа в настройках подключения.")
         return identity
 
-    def _prepare_identity_session(self, profile, identity, completed):
+    def _prepare_identity_session(self, profile, identity, completed, on_failure=None):
         self.set_status("Проверка SSH-профиля «{}»…".format(identity["name"]))
         def unlocked(selected, failure):
             if failure is not None or selected is None:
                 if failure is not None and not isinstance(failure, IdentityCancelled):
                     error(self, "Не удалось разблокировать SSH-профиль", failure)
+                if on_failure:
+                    on_failure()
                 return
             def resolve():
                 try:
@@ -752,6 +769,8 @@ class MainWindow(Gtk.Window):
                     return False
                 if failure is not None:
                     error(self, "Не удалось подготовить SSH-профиль", failure)
+                    if on_failure:
+                        on_failure()
                 else:
                     effective, environment = result
                     os.environ.update(environment)
@@ -797,6 +816,8 @@ class MainWindow(Gtk.Window):
         for child in self.all_panes():
             context = child.get_style_context()
             context.add_class("active-pane") if child is pane else context.remove_class("active-pane")
+        if floating_owner:
+            floating_owner.tab_indicator.set_from_pixbuf(status_pixbuf(bool(pane.pid)))
         if not hasattr(self, "file_browser"):
             return
         profile = pane.profile
@@ -825,22 +846,25 @@ class MainWindow(Gtk.Window):
                 return False
             GLib.idle_add(focus_after_switch)
 
-    def open_session(self, profile, on_open=None):
+    def open_session(self, profile, on_open=None, on_failure=None):
         self.diagnostic_log.write('debug', 'session.open')
         try:
             profile = self._resolve_group_session(profile)
             if profile.get('credential_profile') and not profile.get('_credential_provider'):
-                self.credentials.prepare(profile, lambda ready:self.open_session(ready,on_open))
+                self.credentials.prepare(profile, lambda ready: self.open_session(ready, on_open, on_failure), on_failure)
                 return None
             identity = self._requested_identity(profile)
         except ValueError as exc:
             self.diagnostic_log.write('warning', 'session.profile-invalid')
             error(self, "Проверьте SSH-профиль", exc)
+            if on_failure:
+                on_failure()
             return None
         if identity is not None:
-            self._prepare_identity_session(profile, identity, lambda ready:self._open_session_ready(ready,on_open))
+            self._prepare_identity_session(profile, identity,
+                                           lambda ready: self._open_session_ready(ready, on_open, on_failure), on_failure)
             return None
-        return self._open_session_ready(profile,on_open)
+        return self._open_session_ready(profile, on_open, on_failure)
 
     def _resolve_group_session(self, profile):
         if profile.get("_argv"):
@@ -852,12 +876,14 @@ class MainWindow(Gtk.Window):
             effective["_recording_path"] = profile["_recording_path"]
         return effective
 
-    def _open_session_ready(self, profile, on_open=None):
+    def _open_session_ready(self, profile, on_open=None, on_failure=None):
         if profile.get('import_warning') and 'заблокировано' in profile['import_warning']:
             error(self, 'Проверьте импортированное подключение', profile['import_warning'])
+            if on_failure:
+                on_failure()
             return None
         if profile.get('credential_profile') and not profile.get('_credential_provider'):
-            self.credentials.prepare(profile, lambda ready:self._open_session_ready(ready,on_open))
+            self.credentials.prepare(profile, lambda ready: self._open_session_ready(ready, on_open, on_failure), on_failure)
             return None
         if self._tiles_wanted and profile.get("protocol") in ("rdp", "vnc", "tunnel"):
             self.set_tiled_view(False)
@@ -875,14 +901,17 @@ class MainWindow(Gtk.Window):
                 raise ValueError("Не установлен клиент «{}». Откройте Инструменты → Диагностика.".format(argv[0]))
             workspace=self._create_workspace(profile)
             self.diagnostic_log.write('info', 'session.opened')
-            if on_open:on_open(workspace)
-            return workspace
         except Exception as exc:
             self.diagnostic_log.write('error', 'session.open-failed')
             error(self, "Не удалось открыть подключение", exc)
+            if on_failure:
+                on_failure()
             return None
         finally:
             self._resume_tiling(wanted)
+        if on_open:
+            on_open(workspace)
+        return workspace
 
     def _create_workspace(self, profile, existing_pane=None, position=-1):
         workspace = TerminalWorkspace(profile, on_focus=self._pane_focus, on_status=self.set_status,
@@ -899,6 +928,8 @@ class MainWindow(Gtk.Window):
         labelbox.set_margin_top(4)
         labelbox.set_margin_bottom(4)
         label = Gtk.Label(label=profile.get("name", "Terminal"))
+        workspace.tab_indicator = Gtk.Image()
+        labelbox.pack_start(workspace.tab_indicator, False, False, 0)
         workspace.tab_label = label
         label.set_width_chars(12)
         label.set_max_width_chars(20)
@@ -906,7 +937,7 @@ class MainWindow(Gtk.Window):
         labelbox.pack_start(label, True, True, 0)
         workspace.float_button = action_button("detach", lambda *_: self.toggle_window(workspace), "В отдельное окно")
         labelbox.pack_end(workspace.float_button, False, False, 0)
-        close = action_button("close", lambda *_: self.close_tab(workspace=workspace), "Закрыть вкладку")
+        close = action_button("close", lambda *_: self.close_tab(workspace=workspace, ask=False), "Закрыть вкладку")
         close.get_style_context().add_class("flat")
         close.get_style_context().add_class("tab-close")
         close.set_relief(Gtk.ReliefStyle.NONE)
@@ -939,6 +970,7 @@ class MainWindow(Gtk.Window):
         workspace.show_all()
         self.notebook.set_current_page(index)
         self._overview_active = workspace.active
+        self._update_connection_indicators()
         self.set_status("Открыто: " + profile.get("name", "Terminal"))
         return workspace
 
@@ -1025,15 +1057,9 @@ class MainWindow(Gtk.Window):
         if kind=='duplicate':
             try:profiles=[self._latest_pane_profile(pane) for pane in list(workspace.panes)]
             except ValueError as exc:error(self,'Не удалось дублировать вкладку',exc);return False
-            source_panes=list(workspace.panes)
-            def snapshot(widget):
-                if isinstance(widget,Gtk.Paned):
-                    size=widget.get_allocated_width() if widget.get_orientation()==Gtk.Orientation.HORIZONTAL else widget.get_allocated_height()
-                    return (widget.get_orientation(),widget.get_position()/float(max(1,size)),snapshot(widget.get_child1()),snapshot(widget.get_child2()))
-                return source_panes.index(widget)
             root=self.floating_windows[workspace].body.get_children()[0] if workspace in self.floating_windows else workspace.get_children()[0]
-            layout=snapshot(root)
-            active_index=source_panes.index(workspace.active)
+            layout=workspace.capture_layout(root)
+            active_index=workspace.panes.index(workspace.active)
             target=[None]
             def next_copy(index):
                 if self.closed:return
@@ -1385,7 +1411,8 @@ class MainWindow(Gtk.Window):
         self._rebuilding_sessions = True
         self.session_tree_store.clear()
         query = self.session_search.get_text().lower()
-        self._group_rows, session_rows = {}, {}
+        self._group_rows, self._session_rows = {}, {}
+        session_rows = self._session_rows
         self._group_ids = {group['name']: group['id'] for group in self.store.groups}
         def folder(name):
             if name in self._group_rows:
@@ -1393,7 +1420,7 @@ class MainWindow(Gtk.Window):
             parent_name = name.rsplit("/", 1)[0] if "/" in name else None
             parent = folder(parent_name) if parent_name is not None else None
             iterator = self.session_tree_store.append(parent, [name.rsplit("/", 1)[-1] if name else "Без группы",
-                "", name or "Подключения без группы", group_icon(False), name, None])
+                "", name or "Подключения без группы", group_icon(False), name, None, None])
             self._group_rows[name] = iterator
             return iterator
         for group in sorted(self.store.groups, key=lambda item: item["name"].lower()):
@@ -1408,7 +1435,8 @@ class MainWindow(Gtk.Window):
                                             effective.get("host", ""), effective.get("port", ""))
             session_rows[item["id"]] = self.session_tree_store.append(group,
                 [item["name"], item["id"], tooltip, protocol_icon(item["protocol"]), item.get("group") or "",
-                 platform_pixbuf(item["protocol"])])
+                 platform_pixbuf(item["protocol"]), None])
+        self._update_connection_indicators()
         self.session_tree.expand_all()
         if not query:
             for name in sorted(self._group_rows, key=lambda value: value.count('/'), reverse=True):
@@ -1675,6 +1703,104 @@ class MainWindow(Gtk.Window):
             workspace.tab_label.set_text(name)
             workspace.tab_header.get_accessible().set_name(name)
             workspace.tab_label.set_tooltip_text("\n".join(pane.identity for pane in workspace.panes))
+        self._update_connection_indicators()
+
+    def _save_startup_tabs(self, current):
+        saved = {item['id'] for item in self.store.sessions}
+        tabs, active = [], 0
+        for index in range(self.notebook.get_n_pages()):
+            workspace = self.notebook.get_nth_page(index)
+            references = [pane_reference(pane.profile, saved) for pane in workspace.panes]
+            if not any(references):
+                continue
+            if workspace is current:
+                active = len(tabs)
+            tabs.append({'panes': references, 'layout': workspace.capture_layout(),
+                         'active': workspace.panes.index(workspace.active)})
+        write_workspace(self.workspace_path, True, tabs, active)
+
+    def _restore_startup_tabs(self, document):
+        tabs = document.get('tabs')
+        if not isinstance(tabs, list) or not tabs:
+            return False
+        sessions = {item['id']: item for item in self.store.sessions}
+        restored = {}
+
+        def next_tab(index):
+            if self.closed:
+                return False
+            if index == len(tabs):
+                desired = document.get('active')
+                target = restored.get(desired) if type(desired) is int else None
+                if target is not None and self.notebook.page_num(target) >= 0:
+                    self.notebook.set_current_page(self.notebook.page_num(target))
+                    self._focus_active()
+                return False
+            tab = tabs[index]
+            if not isinstance(tab, dict) or not isinstance(tab.get('panes'), list):
+                GLib.idle_add(next_tab, index + 1)
+                return False
+            references = tab['panes']
+            opened_panes = {}
+
+            def next_pane(position):
+                if self.closed:
+                    return False
+                workspace = restored.get(index)
+                if workspace is not None and self.notebook.page_num(workspace) < 0:
+                    GLib.idle_add(next_tab, index + 1)
+                    return False
+                if position == len(references):
+                    if workspace is not None:
+                        mapping = {source: workspace.panes.index(pane) for source, pane in opened_panes.items()
+                                   if pane in workspace.panes}
+                        layout = project_layout(tab.get('layout'), mapping)
+                        if sorted(layout_leaves(layout)) == list(range(len(workspace.panes))):
+                            workspace.restore_layout(layout)
+                        requested = tab.get('active')
+                        workspace.active = workspace.panes[mapping.get(requested, 0) if type(requested) is int else 0]
+                        self._update_connection_indicators()
+                    GLib.idle_add(next_tab, index + 1)
+                    return False
+                profile = resolve_pane(references[position], sessions)
+
+                def advance():
+                    GLib.idle_add(next_pane, position + 1)
+
+                def opened(created):
+                    pane = created.active
+                    if workspace is None:
+                        restored[index] = created
+                        opened_panes[position] = pane
+                    elif self.notebook.page_num(workspace) >= 0 and self.merge_tabs(created, workspace):
+                        opened_panes[position] = pane
+                    advance()
+
+                if profile is None:
+                    advance()
+                else:
+                    self.open_session(profile, on_open=opened, on_failure=advance)
+                return False
+
+            next_pane(0)
+            return False
+
+        return next_tab(0)
+
+    def _update_connection_indicators(self):
+        states = {}
+        for index in range(self.notebook.get_n_pages()):
+            workspace = self.notebook.get_nth_page(index)
+            active = workspace.active
+            workspace.tab_indicator.set_from_pixbuf(status_pixbuf(bool(active and active.pid and not active.closed)))
+            for pane in workspace.panes:
+                if not pane.closed:
+                    identifier = pane.profile.get('id')
+                    states[identifier] = states.get(identifier, False) or bool(pane.pid)
+        for identifier, row in self._session_rows.items():
+            pixbuf = status_pixbuf(states[identifier]) if identifier in states else None
+            if self.session_tree_store.get_value(row, 6) != pixbuf:
+                self.session_tree_store.set_value(row, 6, pixbuf)
 
     def close_pane(self, pane):
         workspace = self._workspace_for_pane(pane)
@@ -1711,6 +1837,7 @@ class MainWindow(Gtk.Window):
         finally:
             self._resume_tiling(wanted)
         self._sync_file_browser(self.active_pane())
+        self._update_connection_indicators()
 
     def send_text(self, text):
         pane = self.active_pane()
@@ -1933,11 +2060,16 @@ class MainWindow(Gtk.Window):
         box.add(Gtk.Label(label='Уровень логирования', xalign=0))
         box.add(levels)
         box.add(path)
+        remember = Gtk.CheckButton(label='Запоминать вкладки при закрытии', active=self.remember_tabs)
+        box.add(remember)
         dialog.show_all()
         while dialog.run() == Gtk.ResponseType.OK:
             try:
                 diagnostic_log.configure(enabled.get_active(), levels.get_active_id())
                 self._set_theme(theme.get_active_id())
+                if self.remember_tabs != remember.get_active():
+                    write_workspace(self.workspace_path, remember.get_active())
+                    self.remember_tabs = remember.get_active()
                 diagnostic_log.write('info', 'logging.configured')
                 self.notify('Настройки сохранены')
                 break
@@ -2082,8 +2214,16 @@ class MainWindow(Gtk.Window):
     def shutdown(self):
         if self.closed:
             return
+        current = self.current_workspace()
         for workspace in list(self.floating_windows):
             self.dock_window(workspace)
+        if self.tiled.active:
+            self.tiled.leave()
+        if self.remember_tabs:
+            try:
+                self._save_startup_tabs(current)
+            except (OSError, ValueError):
+                self.diagnostic_log.write('warning', 'workspace.save-failed')
         self.closed = True
         self.host_stats.close()
         self.credential_vault.lock()
@@ -2096,8 +2236,6 @@ class MainWindow(Gtk.Window):
         if self._tab_context_menu is not None:
             self._tab_context_menu.destroy()
         self.multiexec.set_enabled(False)
-        if self.tiled.active:
-            self.tiled.leave()
         self.file_browser.shutdown()
         Gtk.StyleContext.remove_provider_for_screen(Gdk.Screen.get_default(), self._style_provider)
         for i in range(self.notebook.get_n_pages()):
@@ -2116,7 +2254,7 @@ def main():
             profile = next((item for item in store.sessions if item["id"] == args.session), None)
             if profile is None:
                 parser.error("подключение с таким идентификатором не найдено")
-        window = MainWindow(store, profile, enable_identities=True, backup_root=profile_root())
+        window = MainWindow(store, profile, start_local=args.local, enable_identities=True, backup_root=profile_root())
         window.present()
         Gtk.main()
     except Exception as exc:
