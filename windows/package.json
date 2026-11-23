@@ -1,7 +1,7 @@
 {
   "name": "astraterm-windows",
   "productName": "AstraTerm",
-  "version": "0.10.27",
+  "version": "0.10.28",
   "description": "Terminal and SSH workspace for Windows",
   "author": "AstraTerm",
   "private": true,

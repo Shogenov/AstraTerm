@@ -110,7 +110,6 @@ def management(pointer, contract):
             assert window.float_window(floating_owner);pump(.5)
             floating = window.floating_windows[floating_owner]
             assert panes['b'].get_toplevel() is floating.window
-            survivor = window._workspace_for_pane(panes['a'])
             window.notebook.set_current_page(window.notebook.page_num(survivor))
             assert panes['b'].terminal.get_realized() and panes['b'].terminal.get_mapped()
             panes['b'].send('floating-input');pump(.2)
