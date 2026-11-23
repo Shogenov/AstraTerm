@@ -627,13 +627,28 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
           y:Math.round(bounds.top+(buffer.baseY+buffer.cursorY-buffer.viewportY+.5)*bounds.height/term.rows)
         }));
       })()`);
-      for (const point of points) {
-        for (const type of ['mouseDown','mouseUp'])
-          window.webContents.sendInputEvent({type,button:'middle',clickCount:1,...point});
-        await delay(75);
+      const { clipboard } = require('electron');
+      const previousText = await clipboard.readText();
+      try {
+        await run('__astraTest.state.terminalClipboard=true');
+        for (const point of points) {
+          assert(Number.isInteger(point.x) && Number.isInteger(point.y), 'Selection must be inside the terminal viewport');
+          for (const type of ['mouseDown','mouseUp'])
+            window.webContents.sendInputEvent({type,button:'middle',clickCount:1,...point});
+          await delay(75);
+        }
+        assert.equal(await run('__astraTest.state.panes.get(__astraTest.state.active).term.getSelection()'), selection.expected);
+        assert.equal(fixture.counters.received.length, inputs);
+        await until(async()=>await clipboard.readText()===selection.expected,'Automatically copied selection');
+        await clipboard.writeText('ASTRA_RIGHT_CLICK_PASTE');
+        await run(`__astraTest.state.panes.get(__astraTest.state.active).container.dispatchEvent(
+          new MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2}))`);
+        await until(()=>fixture.counters.received.slice(inputs).some(value=>value.data.includes('ASTRA_RIGHT_CLICK_PASTE')),
+          'Right click pastes clipboard to SSH');
+      } finally {
+        await run('__astraTest.state.terminalClipboard=false');
+        await clipboard.writeText(previousText);
       }
-      assert.equal(await run('__astraTest.state.panes.get(__astraTest.state.active).term.getSelection()'), selection.expected);
-      assert.equal(fixture.counters.received.length, inputs);
       await run("new Promise(done=>__astraTest.state.panes.get(__astraTest.state.active).term.write('\\x1b[?1049l',done))");
     });
     await require('./smoke-tabs.cjs')({ window, terminals, run, until, delay, check });
@@ -668,7 +683,7 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
     await fixture.close(); fixture = null;
     report.result = 'PASS';
   } catch (error) {
-    report.result = 'FAIL'; report.stage = stage; report.error = error.message;
+    report.result = 'FAIL'; report.stage = stage; report.error = error.message; report.stack = error.stack;
     process.stderr.write('SMOKE_FAILED ' + stage + ': ' + error.message + '\n');
     try { fs.writeFileSync(path.join(output, 'windows-failure.png'), (await window.webContents.capturePage()).toPNG()); } catch {}
   } finally {

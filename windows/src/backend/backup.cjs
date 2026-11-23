@@ -177,8 +177,9 @@ function captureProfile(directory, documentsDirectory) {
   const payload = { documents, keys, missing };
   const appearance = read(path.join(directory, 'appearance.json'), MAX_DOCUMENT, true);
   if (appearance !== null) {
-    const theme = JSON.parse(decoder.decode(appearance))?.theme;
-    if (['dark', 'light'].includes(theme)) payload.theme = theme;
+    const settings = JSON.parse(decoder.decode(appearance));
+    if (['dark', 'light'].includes(settings?.theme)) payload.theme = settings.theme;
+    if (typeof settings?.terminal_clipboard === 'boolean') payload.terminal_clipboard = settings.terminal_clipboard;
   }
   return payload;
 }
@@ -204,6 +205,10 @@ function validatePayload(payload) {
     if (Object.hasOwn(payload, 'theme')) {
       if (!['dark', 'light'].includes(payload.theme)) throw Error();
       checked.theme = payload.theme;
+    }
+    if (Object.hasOwn(payload, 'terminal_clipboard')) {
+      if (typeof payload.terminal_clipboard !== 'boolean') throw Error();
+      checked.terminal_clipboard = payload.terminal_clipboard;
     }
     return checked;
   } catch { throw Error(INVALID); }
@@ -265,7 +270,7 @@ async function readBackup(filename, password) {
 }
 
 async function restoreProfile(root, previous, payload) {
-  const { documents, keys, theme } = validatePayload(payload);
+  const { documents, keys, theme, terminal_clipboard } = validatePayload(payload);
   root = path.resolve(root);
   const parent = path.join(root, PROFILES);
   fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
@@ -296,7 +301,8 @@ async function restoreProfile(root, previous, payload) {
       if (bytes.length > MAX_DOCUMENT) throw Error('Восстановленные настройки превышают допустимый размер.');
       writeNew(path.join(directory, name), bytes);
     }
-    if (theme) writeNew(path.join(directory, 'appearance.json'), jsonBytes({ theme }));
+    if (theme !== undefined || terminal_clipboard !== undefined)
+      writeNew(path.join(directory, 'appearance.json'), jsonBytes({ theme, terminal_clipboard }));
     // Electron's main process is the only writer. Keep the check and switch synchronous.
     if (activeProfile(root) !== previous) throw Error('Активный профиль изменился. Перезапустите AstraTerm и повторите восстановление.');
     writeNew(temporary, jsonBytes({ directory: id }));

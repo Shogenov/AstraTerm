@@ -55,7 +55,10 @@ class RdpManager {
           clearTimeout(readyTimeout);
           record.hwnd=event.hwnd;record.parent=event.parent;record.nativeParent=event.parent;
           if(record.window){const bounds=record.bounds;this.setWindow(record.id,record.window);record.bounds=bounds;}
-          const [width,height]=profile.rdp_resolution.split('x').map(Number);
+          const viewport=record.bounds;
+          const [width,height]=viewport?.width>=200&&viewport.height>=200
+            ? [Math.min(8192,viewport.width - viewport.width % 2),Math.min(8192,viewport.height)]
+            : profile.rdp_resolution.split('x').map(Number);
           let username=profile.username,domain=profile.rdp_domain;
           if(!domain&&username.includes('\\')){[domain,username]=username.split('\\',2);}
           if(record.bounds)this.send(record,{op:'bounds',...record.bounds});
@@ -65,7 +68,6 @@ class RdpManager {
         else if(event.type==='display')record.display={width:event.width,height:event.height,changes:event.changes};
         else if(event.type==='input-error')record.inputError=Number(event.code);
         else if(event.type==='parent'){record.parent=event.parent;record.nativeParent=event.parent;}
-        else if(event.type==='focus')this.emit('rdp:focus',{id:record.id});
         else if(event.type==='disconnected')this.status(record,'exited',`RDP отключён (код ${Number(event.code)}). Переподключение — в меню.`);
         else if(event.type==='error'){record.errorCode=Number(event.code);this.status(record,'error',`Ошибка встроенного RDP (код ${Number(event.code)}). Проверьте адрес и учётные данные.`);}
       });
@@ -86,7 +88,14 @@ class RdpManager {
     record.bounds={x:Math.round(x*scale),y:Math.round(y*scale),width:Math.round(width*scale),height:Math.round(height*scale),visible:value.visible};
     this.send(record,{op:'bounds',...record.bounds,visible:record.bounds.visible&&!owner.isMinimized()});return true;
   }
-  focus(id){const record=this.get(id);if(record){(record.window||this.window).focus?.();this.send(record,{op:'focus'});}return !!record;}
+  focus(id) {
+    const record=this.get(id);
+    if(!record?.bounds?.visible)return false;
+    const owner=record.window||this.window;
+    if(owner.isMinimized()||!owner.isFocused())return false;
+    this.send(record,{op:'focus'});
+    return true;
+  }
   setWindow(id,owner) {
     const record=this.get(id);if(!record)return false;
     record.window=owner;

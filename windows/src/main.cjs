@@ -44,6 +44,7 @@ let profileDirectory;
 let diagnosticLog;
 let sidebarPath;
 let appearancePath;
+let terminalClipboard = false;
 let appearanceWrites = Promise.resolve();
 let workspacePath;
 let workspacePreferences;
@@ -456,7 +457,7 @@ async function openSession(args) {
 async function call(method, args) {
   switch (method) {
     case 'host:stats': return hostStats.read(args.id);
-    case 'bootstrap': return { store: store.snapshot(), identities: identities.list(), vault: vaultState(), platform: process.platform, home: os.homedir(), version: app.getVersion(), appData: profileDirectory, terminals: [...terminals.list(),...rdp.list()], collapsedFolders: [...collapsedFolders], theme: nativeTheme.themeSource, workspace: workspacePreferences, smoke: IS_SMOKE };
+    case 'bootstrap': return { store: store.snapshot(), identities: identities.list(), vault: vaultState(), platform: process.platform, home: os.homedir(), version: app.getVersion(), appData: profileDirectory, terminals: [...terminals.list(),...rdp.list()], collapsedFolders: [...collapsedFolders], theme: nativeTheme.themeSource, terminalClipboard, workspace: workspacePreferences, smoke: IS_SMOKE };
     case 'backup:create': return backups.run(true);
     case 'backup:restore': return backups.run(false);
     case 'sidebar:collapse': {
@@ -667,16 +668,18 @@ async function call(method, args) {
       if (args.remember !== workspacePreferences.remember) await persistWorkspace({ remember: args.remember, tabs: [], active: 0 });
       return workspacePreferences.remember;
     }
-    case 'app:theme': {
-      const { theme } = args;
-      if (!['dark', 'light'].includes(theme)) throw new Error('Неизвестная тема оформления.');
+    case 'app:appearance': {
+      const { theme, terminal_clipboard } = args;
+      if (!['dark', 'light'].includes(theme) || typeof terminal_clipboard !== 'boolean')
+        throw new Error('Неверные настройки оформления или буфера обмена.');
       appearanceWrites = appearanceWrites.catch(() => {}).then(async () => {
-        await writeAtomic(appearancePath, JSON.stringify({ theme }));
+        await writeAtomic(appearancePath, JSON.stringify({ theme, terminal_clipboard }));
+        terminalClipboard = terminal_clipboard;
         nativeTheme.themeSource = theme;
         if (window && !window.isDestroyed()) window.setBackgroundColor(appBackgroundColor());
       });
       await appearanceWrites;
-      return theme;
+      return { theme, terminal_clipboard };
     }
     case 'logging:settings': return { ...diagnosticLog.settings, filename: diagnosticLog.filename };
     case 'logging:save': {
@@ -727,7 +730,9 @@ async function createWindow() {
   appearancePath = path.join(profileDirectory, 'appearance.json');
   nativeTheme.themeSource = 'dark';
   try {
-    if (JSON.parse(fs.readFileSync(appearancePath, 'utf8'))?.theme === 'light') nativeTheme.themeSource = 'light';
+    const appearance = JSON.parse(fs.readFileSync(appearancePath, 'utf8'));
+    if (appearance?.theme === 'light') nativeTheme.themeSource = 'light';
+    terminalClipboard = appearance?.terminal_clipboard === true;
   } catch { /* Older profiles start with the default theme. */ }
   diagnosticLog = new DiagnosticLog(profileDirectory);
   diagnosticLog.write('info', 'app.start');

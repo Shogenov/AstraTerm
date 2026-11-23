@@ -110,6 +110,8 @@ def management(pointer, contract):
             assert window.float_window(floating_owner);pump(.5)
             floating = window.floating_windows[floating_owner]
             assert panes['b'].get_toplevel() is floating.window
+            survivor = window._workspace_for_pane(panes['a'])
+            window.notebook.set_current_page(window.notebook.page_num(survivor))
             assert panes['b'].terminal.get_realized() and panes['b'].terminal.get_mapped()
             panes['b'].send('floating-input');pump(.2)
             assert b'floating-input' in read_bytes(paths['b'])
@@ -118,6 +120,7 @@ def management(pointer, contract):
             window.multiexec.set_selected(panes['a'], True);window.multiexec.set_enabled(True)
             floating.window.present();panes['b'].terminal.grab_focus();pump(.2)
             assert floating.window.get_focus() is panes['b'].terminal
+            assert window.current_workspace() is survivor
             from gi.repository import GdkX11
             pointer.x11.XSetInputFocus.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.c_int,ctypes.c_ulong]
             pointer.x11.XSetInputFocus(pointer.display,GdkX11.X11Window.get_xid(floating.window.get_window()),1,0)
@@ -288,6 +291,7 @@ def main():
                     original = {name: (pane.pid, pane.terminal, pane.connection_generation) for name,pane in panes.items()}
                     if case is contracts['merges'][0]:
                         selection = contracts['rangeSelection']
+                        window._set_appearance(window.theme, True)
                         terminal = owners['source'].active.terminal
                         terminal.feed(("\r\x1b[2J\x1b[H" + selection['text']).encode('ascii'))
                         pump(.15)
@@ -300,6 +304,14 @@ def main():
                             pointer.button(2, True)
                             pointer.button(2, False)
                         assert clipboard.wait_for_text() == selection['expected'], repr(clipboard.wait_for_text())
+                        system_clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+                        assert system_clipboard.wait_for_text() == selection['expected']
+                        system_clipboard.set_text('ASTRA_RIGHT_CLICK_PASTE', -1)
+                        pointer.button(3, True)
+                        pointer.button(3, False)
+                        wait_for(lambda: b'ASTRA_RIGHT_CLICK_PASTE' in read_bytes(paths[case['source'][0]]),
+                                 'right click pastes the system clipboard')
+                        window._set_appearance(window.theme, False)
                         terminal.feed(("CAPTURE_READY_" + case['source'][0]).encode('ascii'))
                         pointer.drag(owners['source'].tab_header, window.cancel_drop)
                         assert not window.cancel_drop.get_visible()

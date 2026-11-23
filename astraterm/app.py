@@ -17,7 +17,7 @@ from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Pango
 from . import __version__
 from .core import (SessionStore, _atomic_json, _config_lock, default_session, validate_session, session_argv,
                    parse_ssh_config, detect_dependencies, tcp_probe, tunnel_argv)
-from .terminal import TerminalWorkspace
+from .terminal import TerminalPane, TerminalWorkspace
 from .terminal_directory import UNKNOWN_DIRECTORY
 from .floating import FloatingWorkspace
 from .dialogs import SessionDialog, MacroDialog, error, confirm, name_dialog
@@ -78,10 +78,13 @@ class MainWindow(Gtk.Window):
         self.remember_tabs = startup_workspace['remember']
         self.appearance_path = os.path.join(directory, 'appearance.json')
         self.theme = 'dark'
+        self.terminal_clipboard = False
         try:
             with open(self.appearance_path, encoding='utf-8') as stream:
-                if json.load(stream).get('theme') == 'light':
-                    self.theme = 'light'
+                appearance = json.load(stream)
+            if appearance.get('theme') == 'light':
+                self.theme = 'light'
+            self.terminal_clipboard = appearance.get('terminal_clipboard') is True
         except (OSError, ValueError, AttributeError):
             pass
         self.diagnostic_log = DiagnosticLog(os.path.dirname(self.store.path))
@@ -243,18 +246,23 @@ class MainWindow(Gtk.Window):
         Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", self.theme == 'dark')
         self._style_provider.load_from_data(styles)
 
-    def _set_theme(self, theme):
+    def _set_appearance(self, theme, terminal_clipboard):
         if theme not in ('dark', 'light'):
             raise ValueError('Неизвестная тема оформления.')
-        if theme == self.theme:
+        if theme == self.theme and terminal_clipboard == self.terminal_clipboard:
             return
         with _config_lock(self.appearance_path):
-            _atomic_json(self.appearance_path, {'theme': theme})
+            _atomic_json(self.appearance_path, {'theme': theme, 'terminal_clipboard': terminal_clipboard})
+        theme_changed = self.theme != theme
         self.theme = theme
-        self._load_style()
+        self.terminal_clipboard = terminal_clipboard
+        if theme_changed:
+            self._load_style()
         for pane in self.all_panes():
-            if hasattr(pane, 'set_theme'):
+            if theme_changed and hasattr(pane, 'set_theme'):
                 pane.set_theme(theme)
+            if isinstance(pane, TerminalPane):
+                pane.terminal_clipboard = terminal_clipboard
 
     def _menu(self):
         bar = Gtk.Menu()
@@ -391,6 +399,8 @@ class MainWindow(Gtk.Window):
         pane.on_reconnect = self.reconnect_pane
         if hasattr(pane, 'set_theme'):
             pane.set_theme(self.theme)
+        if isinstance(pane, TerminalPane):
+            pane.terminal_clipboard = self.terminal_clipboard
         self.multiexec.register(pane)
         if not hasattr(pane, "pane_drag_id"):
             pane.pane_drag_id = uuid.uuid4().hex
@@ -809,15 +819,17 @@ class MainWindow(Gtk.Window):
     def _pane_focus(self, pane):
         if self._layout_input_suspended or pane.closed:
             return
+        owner = self._workspace_for_pane(pane)
+        if owner in self.floating_windows:
+            return
         self._overview_active = pane
-        floating_owner = self._workspace_for_pane(pane)
-        if floating_owner in self.floating_windows:
-            self.notebook.set_current_page(self.notebook.page_num(floating_owner))
         for child in self.all_panes():
+            if self._workspace_for_pane(child) in self.floating_windows:
+                continue
             context = child.get_style_context()
             context.add_class("active-pane") if child is pane else context.remove_class("active-pane")
-        if floating_owner:
-            floating_owner.tab_indicator.set_from_pixbuf(status_pixbuf(bool(pane.pid)))
+        if owner:
+            owner.tab_indicator.set_from_pixbuf(status_pixbuf(bool(pane.pid)))
         if not hasattr(self, "file_browser"):
             return
         profile = pane.profile
@@ -841,8 +853,11 @@ class MainWindow(Gtk.Window):
         if not self._tiles_wanted and not self._layout_input_suspended and getattr(page, "active", None):
             def focus_after_switch():
                 if (not self.closed and not self._tiles_wanted and not self._layout_input_suspended and
-                        self.current_workspace() is page and page.active and not page.active.closed):
+                        self.current_workspace() is page and page not in self.floating_windows and
+                        page.active and not page.active.closed):
                     self._pane_focus(page.active)
+                    if isinstance(page.active, TerminalPane) and page.active.terminal.get_mapped():
+                        page.active.terminal.grab_focus()
                 return False
             GLib.idle_add(focus_after_switch)
 
@@ -1006,6 +1021,11 @@ class MainWindow(Gtk.Window):
             workspace.float_button.set_tooltip_text('Вернуть во вкладки')
         finally:
             self._resume_tiling(wanted)
+        if self.current_workspace() is workspace:
+            for index in range(self.notebook.get_n_pages()):
+                if self.notebook.get_nth_page(index) not in self.floating_windows:
+                    self.notebook.set_current_page(index)
+                    break
         workspace.active.terminal.grab_focus()
         return True
 
@@ -2095,11 +2115,15 @@ class MainWindow(Gtk.Window):
         box.add(path)
         remember = Gtk.CheckButton(label='Запоминать вкладки при закрытии', active=self.remember_tabs)
         box.add(remember)
+        terminal_clipboard = Gtk.CheckButton(label='Копировать выделение и вставлять правой кнопкой в терминале',
+                                             active=self.terminal_clipboard)
+        terminal_clipboard.set_tooltip_text('Shift+ПКМ открывает меню терминала')
+        box.add(terminal_clipboard)
         dialog.show_all()
         while dialog.run() == Gtk.ResponseType.OK:
             try:
                 diagnostic_log.configure(enabled.get_active(), levels.get_active_id())
-                self._set_theme(theme.get_active_id())
+                self._set_appearance(theme.get_active_id(), terminal_clipboard.get_active())
                 if self.remember_tabs != remember.get_active():
                     write_workspace(self.workspace_path, remember.get_active())
                     self.remember_tabs = remember.get_active()
@@ -2204,22 +2228,27 @@ class MainWindow(Gtk.Window):
             if translated[0]:
                 key = (Gdk.keyval_name(translated[1]) or key).lower()
         if control and shift:
+            floating = next((item.workspace for item in self.floating_windows.values() if item.window is window), None)
+            pane = floating.active if floating else self.active_pane()
             if key == "m":
                 self.set_multiexec(not self.multiexec.enabled)
                 return True
             if key in ("insert", "kp_insert"):
-                pane = self.active_pane()
-                if pane and self.get_focus() is pane.terminal:
-                    self.multi_paste()
+                if pane and pane.profile.get('protocol') != 'rdp' and window.get_focus() is pane.terminal:
+                    if floating:
+                        self._paste_from_pane(pane)
+                    else:
+                        self.multi_paste()
                     return True
-            callbacks = {"t": self.new_local, "w": self.close_tab,
-                         "e": lambda: self.split(Gtk.Orientation.HORIZONTAL),
-                         "o": lambda: self.split(Gtk.Orientation.VERTICAL), "f": self.find}
+            callbacks = {"t": self.new_local, "w": lambda: self.close_tab(workspace=floating),
+                         "f": lambda: pane and pane.show_search()}
+            if not floating:
+                callbacks.update({"e": lambda: self.split(Gtk.Orientation.HORIZONTAL),
+                                  "o": lambda: self.split(Gtk.Orientation.VERTICAL)})
             if key in callbacks:
                 callbacks[key]()
                 return True
-            pane = self.active_pane()
-            if pane and pane.profile.get('protocol') != 'rdp' and self.get_focus() is pane.terminal and key in ("c", "v"):
+            if pane and pane.profile.get('protocol') != 'rdp' and window.get_focus() is pane.terminal and key in ("c", "v"):
                 pane.terminal.copy_clipboard() if key == "c" else self._paste_from_pane(pane)
                 return True
         if control and key in ("plus", "equal", "kp_add", "minus", "kp_subtract"):

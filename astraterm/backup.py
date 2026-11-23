@@ -177,8 +177,11 @@ def capture_profile(directory):
     raw = _read(os.path.join(directory, 'appearance.json'), MAX_DOCUMENT, optional=True)
     if raw is not None:
         appearance = json.loads(raw.decode('utf-8-sig'))
-        if isinstance(appearance, dict) and appearance.get('theme') in ('dark', 'light'):
-            payload['theme'] = appearance['theme']
+        if isinstance(appearance, dict):
+            if appearance.get('theme') in ('dark', 'light'):
+                payload['theme'] = appearance['theme']
+            if isinstance(appearance.get('terminal_clipboard'), bool):
+                payload['terminal_clipboard'] = appearance['terminal_clipboard']
     return payload
 
 
@@ -207,6 +210,10 @@ def _validate_payload(payload):
             if payload['theme'] not in ('dark', 'light'):
                 raise ValueError()
             checked['theme'] = payload['theme']
+        if 'terminal_clipboard' in payload:
+            if not isinstance(payload['terminal_clipboard'], bool):
+                raise ValueError()
+            checked['terminal_clipboard'] = payload['terminal_clipboard']
         return checked
     except (KeyError, ValueError, TypeError):
         raise ValueError(INVALID) from None
@@ -293,8 +300,9 @@ def restore_profile(root, previous, payload):
             if len(data) > MAX_DOCUMENT:
                 raise ValueError('Восстановленные настройки превышают допустимый размер.')
             _write_new(os.path.join(directory, name), data)
-        if 'theme' in payload:
-            _write_new(os.path.join(directory, 'appearance.json'), _json_bytes({'theme': payload['theme']}))
+        appearance = {key: payload[key] for key in ('theme', 'terminal_clipboard') if key in payload}
+        if appearance:
+            _write_new(os.path.join(directory, 'appearance.json'), _json_bytes(appearance))
 
         marker = os.path.join(root, MARKER)
         with _config_lock(marker):

@@ -53,11 +53,13 @@ module.exports = async function checkTabManagement({ window, terminals, files, r
     await until(()=>run(`__astraTest.state.panes.get(${JSON.stringify(ids.b)}).term.buffer.active.getLine(__astraTest.state.panes.get(${JSON.stringify(ids.b)}).term.buffer.active.baseY)?.translateToString().includes('ASTRA_FLOATING') || Array.from({length:__floatingTerm.buffer.active.length},(_,i)=>__floatingTerm.buffer.active.getLine(i).translateToString()).join('').includes('ASTRA_FLOATING_PTY')`),'Live floating output');
     const {BrowserWindow}=require('electron');const child=BrowserWindow.getAllWindows().find(item=>item!==window);
     assert(child);assert.equal(child.webContents.getLastWebPreferences().sandbox,true);
+    await run(`__astraTest.focusPane(${JSON.stringify(ids.survivor)})`);
     await run(`__astraTest.router.select(${JSON.stringify(ids.a)},true);__astraTest.router.enabled=true`);
     child.focus();await run(`__astraTest.focusPane(${JSON.stringify(ids.b)})`);await delay(300);
     for(const character of "Write-Output ('ASTRA_FLOAT_'+'KEYBOARD_OK')")child.webContents.sendInputEvent({type:'char',keyCode:character});
     child.webContents.sendInputEvent({type:'keyDown',keyCode:'Return'});child.webContents.sendInputEvent({type:'keyUp',keyCode:'Return'});
     await until(()=>run("Array.from({length:__floatingTerm.buffer.active.length},(_,i)=>__floatingTerm.buffer.active.getLine(i).translateToString()).join('').includes('ASTRA_FLOAT_KEYBOARD_OK')"),'Native keyboard input reaches the floating PTY');
+    assert.equal(await run('__astraTest.state.active'),ids.survivor);
     assert.equal(await run(`(()=>{const term=__astraTest.state.panes.get(${JSON.stringify(ids.a)}).term;return Array.from({length:term.buffer.active.length},(_,i)=>term.buffer.active.getLine(i).translateToString()).join('').includes('ASTRA_FLOAT_KEYBOARD_OK')})()`),true);
     await run(`__astraTest.router.enabled=false;__astraTest.router.select(${JSON.stringify(ids.a)},false)`);
     child.close();await until(()=>run(`!__astraTest.state.groups.find(g=>g.id===${JSON.stringify(group)}).floating`),'Native window close docks the tab');

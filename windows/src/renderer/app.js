@@ -37,6 +37,7 @@ function iconButton(name, title, callback) {
 }
 const state = {
   theme: "dark",
+  terminalClipboard: false,
   rememberTabs: false,
   store: { sessions: [], groups: [], macros: [], tunnels: [] },
   identities: { profiles: [], keys: [] },
@@ -337,6 +338,7 @@ function syncSessionIndicators() {
 function selectGroup(id) {
   const group = state.groups.find((item) => item.id === id);
   if (!group) return;
+  group.floating?.window.focus();
   focusPane(group.active || group.panes[0]);
 }
 const TAB_DRAG_TYPE = "application/x-astraterm-tab";
@@ -496,9 +498,11 @@ async function floatWindow(id) {
       el("button",{text:"Вернуть во вкладки",onclick:command(()=>dockWindow(id))}));
     child.addEventListener("resize",scheduleFit);
     child.addEventListener("focus",()=>{if(state.panes.has(group.active))focusPane(group.active,false);});
-    child.addEventListener("keydown",event=>{if(!event.target.closest(".xterm"))shortcut(event);});
+    child.addEventListener("keydown",event=>{if(!event.target.closest(".xterm"))shortcut(event,state.panes.get(group.active));});
     await api.invoke("ui:floatReady",{token:floating.token});
     for(const paneId of group.panes)state.panes.get(paneId).nativeBounds=null;
+    const docked = state.groups.find(item => !item.floating);
+    if (state.activeGroup === id && docked) focusPane(docked.active, false);
     renderLayout();child.focus();focusPane(group.active);return true;
   }catch(error){if(!group.floating)return false;await dockWindow(id);throw error;}
 }
@@ -660,7 +664,7 @@ function renderLayout() {
     const owner = state.groups.find((item) => item.panes.includes(pane.id));
     pane.heading.hidden = !state.overview && owner?.panes.length === 1;
     pane.check.hidden = !state.overview || pane.profile.protocol === "rdp";
-    pane.element.classList.toggle("focused", pane.id === state.active);
+    pane.element.classList.toggle("focused", pane.id === (owner?.floating ? owner.active : state.active));
     pane.element.classList.toggle("recipient", router.selected.has(pane.id));
     pane.check.checked = router.selected.has(pane.id);
     pane.check.disabled = pane.status !== "running";
@@ -672,25 +676,43 @@ function renderLayout() {
 function focusPane(id, grab = true) {
   const pane = state.panes.get(id);
   if (!pane) return;
+  const group = state.groups.find((item) => item.panes.includes(id));
+  if (group?.floating) {
+    group.active = id;
+    for (const other of group.panes)
+      state.panes.get(other)?.element.classList.toggle("focused", other === id);
+    if (grab) group.floating.window.requestAnimationFrame(() => {
+      if (group.floating && group.active === id && pane.element.isConnected) {
+        if (pane.profile.protocol === "rdp") syncRdpBounds();
+        pane.term.focus();
+      }
+    });
+    return;
+  }
   const changed = state.active !== id;
   const previousGroup = state.activeGroup;
   state.active = id;
-  const group = state.groups.find((item) => item.panes.includes(id));
   if (group) {
     state.activeGroup = group.id;
     group.active = id;
   }
   for (const other of state.panes.values())
-    other.element.classList.toggle("focused", other.id === id);
+    if (other.element.ownerDocument === document) other.element.classList.toggle("focused", other.id === id);
   $("connection-info").textContent =
     `${pane.profile.protocol === "local" ? "PowerShell" : pane.profile.protocol.toUpperCase()} · ${pane.profile.encoding || "UTF-8"} · ${state.fontSize} px`;
-  if (!state.overview && previousGroup !== state.activeGroup) renderLayout();
+  if (!state.overview && previousGroup !== state.activeGroup) {
+    renderLayout();
+    syncRdpBounds();
+  }
   else {
     renderTabs();
     renderMulti();
   }
   if (grab) requestAnimationFrame(() => {
-    if (state.active === pane.id && pane.element.isConnected) pane.term.focus();
+    if (state.active === pane.id && pane.element.isConnected && !group?.floating) {
+      if (pane.profile.protocol === "rdp") syncRdpBounds();
+      pane.term.focus();
+    }
   });
   if (changed) syncFiles().catch(showError);
   if(changed)void hostStats.refresh();
@@ -940,7 +962,7 @@ function addPane(record) {
           .catch(showError).finally(() => { pane.endingAction = false; });
         return false;
       }
-      if (shortcut(event)) return false;
+      if (shortcut(event, pane)) return false;
       armHuman(pane);
     }
     return true;
@@ -948,6 +970,10 @@ function addPane(record) {
   for (const event of ["beforeinput", "input", "compositionend"])
     pane.container.addEventListener(event, () => armHuman(pane), true);
   term.onKey(() => armHuman(pane));
+  term.onSelectionChange(() => {
+    if (state.terminalClipboard && term.hasSelection())
+      api.invoke("clipboard:write", { text: term.getSelection() }).catch(showError);
+  });
   term.onData((data) =>
     router.input(pane.id, data, pane.human && pane.suppress === 0),
   );
@@ -967,6 +993,10 @@ function addPane(record) {
   pane.container.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     focusPane(pane.id, false);
+    if (state.terminalClipboard && !event.shiftKey) {
+      pasteClipboard(false, pane).catch(showError);
+      return;
+    }
     api
       .invoke("ui:terminalMenu", {
         id: pane.id,
@@ -1165,8 +1195,7 @@ function pasteFor(source, text, forceSelected = false) {
     }
   }
 }
-async function pasteClipboard(forceSelected = false) {
-  const source = active();
+async function pasteClipboard(forceSelected = false, source = active()) {
   if (!source) return;
   const generation = source.generation;
   const text = await api.invoke("clipboard:read");
@@ -2882,8 +2911,11 @@ async function tunnelsDialog() {
   await refresh();
   dialog.show();
 }
-function find() {
-  if (!active() || active().profile.protocol === "rdp") return;
+let floatingFindTarget;
+function find(pane = active()) {
+  if (!pane || pane.profile.protocol === "rdp") return;
+  floatingFindTarget = pane.element.ownerDocument !== document ? pane.id : undefined;
+  if (floatingFindTarget) window.focus();
   $("find-bar").hidden = false;
   $("find-text").focus();
   $("find-text").select();
@@ -2895,8 +2927,7 @@ function zoom(delta) {
   scheduleFit();
   if (active()) focusPane(active().id, false);
 }
-async function saveOutput() {
-  const pane = active();
+async function saveOutput(pane = active()) {
   if (!pane || pane.profile.protocol === "rdp") return;
   const buffer = pane.term.buffer.active;
   const lines = [];
@@ -2954,10 +2985,17 @@ async function settingsDialog() {
   dialog.body.prepend(el("p", { class: "dialog-description", text: current.filename }));
   const remember = checkbox("Запоминать вкладки при закрытии", state.rememberTabs);
   remember.wrapper.classList.add("full");
-  dialog.grid.append(remember.wrapper);
+  const terminalClipboard = checkbox("Копировать выделение и вставлять правой кнопкой в терминале", state.terminalClipboard);
+  terminalClipboard.wrapper.classList.add("full");
+  terminalClipboard.wrapper.title = "Shift+ПКМ открывает меню терминала";
+  dialog.grid.append(remember.wrapper, terminalClipboard.wrapper);
   dialog.submit(async () => {
     await api.invoke("logging:save", { enabled: toggle.input.checked, level: level.value });
-    if (theme.value !== state.theme) setTheme(await api.invoke("app:theme", { theme: theme.value }));
+    if (theme.value !== state.theme || terminalClipboard.input.checked !== state.terminalClipboard) {
+      const appearance = await api.invoke("app:appearance", { theme: theme.value, terminal_clipboard: terminalClipboard.input.checked });
+      setTheme(appearance.theme);
+      state.terminalClipboard = appearance.terminal_clipboard;
+    }
     if (remember.input.checked !== state.rememberTabs)
       state.rememberTabs = await api.invoke("app:rememberTabs", { remember: remember.input.checked });
     toast("Настройки сохранены");
@@ -3011,7 +3049,7 @@ async function action(name, payload = {}) {
     }
     state.files.selected = payload.entry;
   }
-  if (id && state.panes.has(id) && ["reconnect", "find", "save-output", "record", "copy", "paste", "select-all", "close-terminal"].includes(name)) focusPane(id);
+  const pane = id ? state.panes.get(id) : active();
   switch (name) {
     case "new-session":
       if (Object.hasOwn(payload, "group")) state.selectedFolder = payload.group;
@@ -3081,9 +3119,9 @@ async function action(name, payload = {}) {
         });
       break;
     case "reconnect":
-      return reconnect();
+      return pane && reconnect(pane.id);
     case "find":
-      return find();
+      return pane && find(pane);
     case "zoom-in":
       return zoom(1);
     case "zoom-out":
@@ -3097,22 +3135,22 @@ async function action(name, payload = {}) {
     case "toggle-files":
       return togglePanel("files-panel");
     case "save-output":
-      return saveOutput();
+      return pane && saveOutput(pane);
     case "record":
-      if (active()) return api.invoke("terminal:record", { id: active().id });
+      if (pane) return api.invoke("terminal:record", { id: pane.id });
       break;
     case "copy":
-      if (active())
+      if (pane)
         return api.invoke("clipboard:write", {
-          text: active().term.getSelection(),
+          text: pane.term.getSelection(),
         });
       break;
     case "paste":
-      return pasteClipboard();
+      return pane && pasteClipboard(false, pane);
     case "select-all":
-      return active()?.term.selectAll();
+      return pane?.term.selectAll();
     case "close-terminal":
-      return active() && closePane(active().id);
+      return pane && closePane(pane.id);
     case "file-edit":
       return state.files.selected && (state.files.selected.isDirectory ? loadFiles(state.files.selected.path) : editFile(state.files.selected));
     case "file-download":
@@ -3141,7 +3179,7 @@ async function action(name, payload = {}) {
       return split("vertical");
   }
 }
-function shortcut(event) {
+function shortcut(event, pane = active()) {
   if (event.type && event.type !== "keydown") return false;
   if (
     event.target?.closest?.("input,textarea,select,[contenteditable=true]") &&
@@ -3151,16 +3189,17 @@ function shortcut(event) {
   const key = event.key.toLowerCase();
   let callback;
   if (event.ctrlKey && event.shiftKey) {
+    const group = state.groups.find(item => item.panes.includes(pane?.id));
     callback = {
       t: () => openSession(),
-      w: () => currentGroup() && closeGroup(currentGroup().id),
-      e: () => split("horizontal"),
-      o: () => split("vertical"),
+      w: () => group && closeGroup(group.id),
+      e: group?.floating ? undefined : () => split("horizontal"),
+      o: group?.floating ? undefined : () => split("vertical"),
       m: () => multi(!router.enabled),
-      f: find,
-      c: () => action("copy"),
-      v: () => pasteClipboard(),
-      insert: () => (router.enabled ? pasteClipboard(true) : pasteClipboard()),
+      f: () => find(pane),
+      c: () => pane && action("copy", { id: pane.id }),
+      v: () => pasteClipboard(false, pane),
+      insert: () => pasteClipboard(router.enabled, pane),
     }[key];
   } else if (event.ctrlKey && !event.altKey && !event.metaKey) {
     if (["+", "=", "-"].includes(key)) callback = () => zoom(key === "-" ? -1 : 1);
@@ -3256,7 +3295,6 @@ function handleEvent(event) {
     return;
   }
   if (pane.profile.protocol === "rdp") {
-    if (type === "rdp:focus") focusPane(pane.id,false);
     if (type === "terminal:status") {
       pane.status=payload.status;pane.generation=payload.generation;
       pane.nativeBounds=null;
@@ -3373,11 +3411,16 @@ function wire() {
     "file-mkdir": () => fileAction("mkdir"),
     "file-rename": () => fileAction("rename"),
     "file-delete": () => fileAction("remove"),
-    "find-prev": () => active()?.search.findPrevious($("find-text").value),
-    "find-next": () => active()?.search.findNext($("find-text").value),
+    "find-prev": () => (floatingFindTarget ? state.panes.get(floatingFindTarget) : active())?.search?.findPrevious($("find-text").value),
+    "find-next": () => (floatingFindTarget ? state.panes.get(floatingFindTarget) : active())?.search?.findNext($("find-text").value),
     "find-close": () => {
       $("find-bar").hidden = true;
-      active()?.term.focus();
+      const pane = floatingFindTarget ? state.panes.get(floatingFindTarget) : active();
+      floatingFindTarget = undefined;
+      if (pane) {
+        pane.element.ownerDocument.defaultView.focus();
+        focusPane(pane.id);
+      }
     },
   };
   for (const [id, callback] of Object.entries(clicks))
@@ -3412,11 +3455,9 @@ function wire() {
     event.preventDefault();
     command(() => loadFiles($("files-path").value))();
   });
-  $("find-text").addEventListener("input", () =>
-    active()?.search.findNext($("find-text").value),
-  );
+  $("find-text").addEventListener("input", clicks["find-next"]);
   $("find-text").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") active()?.search.findNext(event.target.value);
+    if (event.key === "Enter") clicks["find-next"]();
     if (event.key === "Escape") $("find-close").click();
   });
   $("tabs").addEventListener(
@@ -3487,6 +3528,7 @@ async function boot() {
   const initial = await api.invoke("bootstrap");
   state.bootstrap = initial;
   state.rememberTabs = Boolean(initial.workspace?.remember);
+  state.terminalClipboard = initial.terminalClipboard === true;
   setTheme(initial.theme === "light" ? "light" : "dark");
   state.store = initial.store;
   state.identities = initial.identities;

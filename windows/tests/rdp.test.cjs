@@ -22,6 +22,7 @@ test('RDP uses private stdin, does not expose secret and contains display bounds
   const connect=native.child.commands.find(command=>command.op==='connect');assert.equal(connect.password,'synthetic-password');assert.equal(connect.domain,'DOMAIN');assert.equal(connect.username,'operator');
   assert(!JSON.stringify(events).includes('synthetic-password'));assert(!JSON.stringify(manager.list()).includes('synthetic-password'));
   assert.equal(native.child.commands.filter(command=>command.op==='bounds').at(-1).width,1200);
+  assert.deepEqual([connect.width,connect.height],[1200,900]);
   assert(native.child.commands.findIndex(command=>command.op==='bounds')<native.child.commands.findIndex(command=>command.op==='connect'));
   assert.throws(()=>manager.bounds(record.id,{x:0,y:0,width:NaN,height:20,scale:1,visible:true}));
   manager.close(record.id);await tick();assert.equal(native.child.exitCode,1);assert(!manager.get(record.id));
@@ -51,11 +52,18 @@ test('RDP refresh preserves desired visibility across minimize and changes only 
   manager.window.isMinimized=()=>false;manager.refresh();
   assert.equal(child.commands.at(-1).op,'refresh');
   assert.equal(child.commands.at(-2).visible,true);
-  let focuses=0;const floating={getNativeWindowHandle:()=>Buffer.from('4d00000000000000','hex'),getContentSize:()=>[900,650],isMinimized:()=>false,focus:()=>focuses++};
+  let focused=false;const floating={getNativeWindowHandle:()=>Buffer.from('4d00000000000000','hex'),getContentSize:()=>[900,650],isMinimized:()=>false,isFocused:()=>focused};
   manager.setWindow(record.id,floating);manager.bounds(record.id,value);manager.refresh(floating);
   assert.equal(child.commands.findLast(command=>command.op==='reparent').parent,'77');
-  assert.equal(focuses,0);assert.equal(record.child,child);assert.equal(record.generation,generation);
-  manager.focus(record.id);assert.equal(focuses,1);manager.dispose();await tick();
+  assert.equal(record.child,child);assert.equal(record.generation,generation);
+  assert.equal(manager.focus(record.id),false);
+  focused=true;
+  assert.equal(manager.focus(record.id),true);
+  assert.equal(child.commands.at(-1).op,'focus');
+  manager.bounds(record.id,{...value,visible:false});
+  assert.equal(manager.focus(record.id),false);
+  assert.equal(child.commands.at(-1).visible,false);
+  manager.dispose();await tick();
 });
 
 test('a presentation owner cannot be released until the native helper acknowledges its new HWND parent',async()=>{

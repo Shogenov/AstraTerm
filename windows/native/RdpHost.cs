@@ -8,10 +8,22 @@ using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
+[ComImport, Guid("00000113-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IOleInPlaceObject {
+    [PreserveSig] int GetWindow(out IntPtr hwnd);
+    [PreserveSig] int ContextSensitiveHelp([MarshalAs(UnmanagedType.Bool)] bool enterMode);
+    [PreserveSig] int InPlaceDeactivate();
+    [PreserveSig] int UIDeactivate();
+}
+
 sealed class RdpControl : AxHost {
     public RdpControl() : base("8B918B82-7985-4C24-89DF-C33AD2BBFBCD") { }
     public object Client { get { return GetOcx(); } }
     public bool RetainPresentation;
+    public void ReleaseInput() {
+        var inPlace = Client as IOleInPlaceObject;
+        if(inPlace != null)inPlace.UIDeactivate();
+    }
     protected override void OnLostFocus(EventArgs e) {
         // AxHost's default UIDeactivate clears the RDP presenter when focus moves
         // to Chromium (including mouse crossings). Keep the visible object active;
@@ -26,6 +38,8 @@ sealed class RdpHost : Form {
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int w, int h, uint flags);
     [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr context);
     [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr hwnd,uint flags);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
     [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hwnd,uint command);
     [DllImport("user32.dll")] static extern bool RedrawWindow(IntPtr hwnd,IntPtr rect,IntPtr region,uint flags);
@@ -78,15 +92,15 @@ sealed class RdpHost : Form {
         Bind(10,new Action<int>(code=>Emit(new {type="error",code=code})));
         Bind(18,new Action(()=>Emit(new {type="certificate-warning"})));
         Bind(19,new Action(()=>Emit(new {type="certificate-dismissed"})));
-        control.Enter+=(s,e)=>Emit(new {type="focus"});
         displayTimer.Tick+=(s,e)=>{
             displayTimer.Stop();
             if(!connected || !Visible || ClientSize.Width<200 || ClientSize.Height<200)return;
-            int width=ClientSize.Width,height=ClientSize.Height;
+            int width=Math.Min(8192,ClientSize.Width & ~1),height=Math.Min(8192,ClientSize.Height);
             if(width==displayWidth && height==displayHeight)return;
             try {
                 dynamic rdp=control.Client;
-                rdp.UpdateSessionDisplaySettings((uint)width,(uint)height,(uint)width,(uint)height,0u,100u,100u);
+                uint widthMm=(uint)Math.Round(width*25.4/96),heightMm=(uint)Math.Round(height*25.4/96);
+                rdp.UpdateSessionDisplaySettings((uint)width,(uint)height,widthMm,heightMm,0u,100u,100u);
                 displayWidth=width;displayHeight=height;displayChanges++;
                 Emit(new {type="display",width=width,height=height,changes=displayChanges});
             }catch(COMException) { }
@@ -96,6 +110,12 @@ sealed class RdpHost : Form {
         Emit(new {type="ready",hwnd=Handle.ToInt64().ToString(),parent=GetParent(Handle).ToInt64().ToString()});
     }
     void ScheduleDisplay() {displayTimer.Stop();displayTimer.Start();}
+    void HideSurface() {
+        if(keyboard!=null)keyboard.Release();
+        if(!Visible)return;
+        if(connected)control.ReleaseInput();
+        Hide();
+    }
     void ClipNativeSurface() {
         // The browser paints on hover as well as on focus. Exclude native children
         // from its paint region, and exclude the RDP surface from overlapping
@@ -143,10 +163,8 @@ sealed class RdpHost : Form {
             advanced.AuthenticationLevel=2;
             advanced.SmartSizing=true;advanced.RedirectClipboard=true;
             advanced.EnableWindowsKey=1;advanced.AcceleratorPassthrough=1;
-            // The visible control lives in a helper, while Electron owns the foreground
-            // window. Keep its native input/presentation path active across that boundary.
-            // RdpKeyboard separately gates Win gestures on the real foreground/focus HWND.
-            advanced.allowBackgroundInput=1;
+            // Retain the visible desktop across blur without accepting background input.
+            advanced.allowBackgroundInput=0;
             advanced.RedirectDrives=false;advanced.RedirectPrinters=false;
             advanced.ClearTextPassword=Convert.ToString(args["password"]);
             rdp.SecuredSettings2.KeyboardHookMode=1;
@@ -155,7 +173,7 @@ sealed class RdpHost : Form {
         } else if(op=="reparent") {
             var next=new IntPtr(long.Parse(Convert.ToString(args["parent"])));
             if(!IsWindow(next))throw new InvalidOperationException();
-            if(keyboard!=null)keyboard.Release();Hide();SetParent(Handle,next);
+            HideSurface();SetParent(Handle,next);
             if(GetParent(Handle)!=next)throw new InvalidOperationException();
             owner=next;
             ClipNativeSurface();
@@ -165,7 +183,7 @@ sealed class RdpHost : Form {
             if(connected && Visible)RedrawWindow(Handle,IntPtr.Zero,IntPtr.Zero,0x0181);
         } else if(op=="bounds") {
             bool visible=Convert.ToBoolean(args["visible"]);
-            if(!visible){if(keyboard!=null)keyboard.Release();Hide();Emit(new {type="surface",visible=false,frontmost=false});return;}
+            if(!visible){HideSurface();Emit(new {type="surface",visible=false,frontmost=false});return;}
             int w=Math.Max(1,Convert.ToInt32(args["width"])),h=Math.Max(1,Convert.ToInt32(args["height"]));
             // HWND_TOP is required: the Chromium render HWND otherwise covers this native child.
             int x=Convert.ToInt32(args["x"]),y=Convert.ToInt32(args["y"]);
@@ -177,7 +195,12 @@ sealed class RdpHost : Form {
             NativeRect actual;GetWindowRect(Handle,out actual);var origin=new NativePoint {X=actual.Left,Y=actual.Top};MapWindowPoints(IntPtr.Zero,owner,ref origin,1);
             Emit(new {type="surface",visible=IsWindowVisible(Handle),frontmost=GetWindow(Handle,3)==IntPtr.Zero,x=origin.X,y=origin.Y,width=actual.Right-actual.Left,height=actual.Bottom-actual.Top});
             if(w!=displayWidth || h!=displayHeight)ScheduleDisplay();
-        } else if(op=="focus") {if(Visible && !control.ContainsFocus){control.DoVerb(-4);control.Focus();}}
+        } else if(op=="focus") {
+            if(Visible && GetAncestor(GetForegroundWindow(),2)==owner && !control.ContainsFocus) {
+                control.DoVerb(-4);
+                control.Focus();
+            }
+        }
         else if(op=="close") {Close();}
     }
     protected override void OnFormClosing(FormClosingEventArgs e) {

@@ -110,6 +110,8 @@ class TerminalPane(Gtk.Box):
         body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         body.get_style_context().add_class("terminal-body")
         self.terminal = InputTerminal()
+        self.terminal_clipboard = False
+        self.terminal.connect("selection-changed", self._copy_selection)
         self.terminal.get_style_context().add_class("terminal-surface")
         self.terminal.on_user_input = lambda data: self.on_input(self, data)
         self.terminal.on_user_paste = lambda primary: self.paste(primary)
@@ -338,10 +340,17 @@ class TerminalPane(Gtk.Box):
         style = self.get_style_context()
         style.add_class("multiexec-selected") if selected else style.remove_class("multiexec-selected")
 
+    def _copy_selection(self, terminal):
+        if self.terminal_clipboard and terminal.get_has_selection():
+            terminal.copy_clipboard()
+
     def _button_press(self, terminal, event):
         if event.button != 3:
             return False
         self.on_focus(self)
+        if self.terminal_clipboard and not event.state & Gdk.ModifierType.SHIFT_MASK:
+            self.paste()
+            return True
         menu = Gtk.Menu()
         for label, callback in [("Копировать", lambda *_: terminal.copy_clipboard()),
                                 ("Вставить", lambda *_: self.paste()),
