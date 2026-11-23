@@ -76,8 +76,8 @@ sealed class RdpHost : Form {
         ClipNativeSurface();
         IntPtr controlHandle=control.Handle;
         Bind(1,new Action(()=>Emit(new { type="connecting" })));
-        Bind(2,new Action(()=>Emit(new { type="connected" })));
-        Bind(3,new Action(()=>{
+        // An RDP desktop can be ready without a Windows logon notification (xrdp).
+        Bind(2,new Action(()=>{
             connected=true;
             control.RetainPresentation=true;
             if(keyboard!=null){keyboard.Dispose();keyboard=null;}
@@ -88,6 +88,7 @@ sealed class RdpHost : Form {
             }));
             ScheduleDisplay();Emit(new { type="running" });
         }));
+        Bind(3,new Action(()=>ScheduleDisplay()));
         Bind(4,new Action<int>(reason=>{connected=false;control.RetainPresentation=false;if(keyboard!=null){keyboard.Dispose();keyboard=null;}Emit(new {type="disconnected",code=reason});}));
         Bind(10,new Action<int>(code=>Emit(new {type="error",code=code})));
         Bind(18,new Action(()=>Emit(new {type="certificate-warning"})));
