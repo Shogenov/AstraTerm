@@ -172,6 +172,9 @@ def check_theme(window, panes):
             combo = next(item for item in dialog.get_content_area().get_children()
                          if isinstance(item, Gtk.ComboBoxText) and item.get_active_id() in ('light', 'dark'))
             combo.set_active_id(theme)
+            clipboard = next(item for item in dialog.get_content_area().get_children()
+                             if isinstance(item, Gtk.CheckButton) and 'выделение' in item.get_label())
+            clipboard.set_active(theme == 'light')
             dialog.response(Gtk.ResponseType.OK)
             return False
 
@@ -186,7 +189,8 @@ def check_theme(window, panes):
         padding = body.get_style_context().get_background_color(body.get_state_flags())
         assert surface.equal(padding) and minimum <= padding.red <= maximum, (theme, surface, padding)
         with open(window.appearance_path, encoding='utf-8') as stream:
-            assert json.load(stream) == {'theme': theme}
+            assert json.load(stream) == {'theme': theme, 'terminal_clipboard': theme == 'light'}
+        assert all(pane.terminal_clipboard == (theme == 'light') for pane in panes)
         assert window.theme == theme and [pane.pid for pane in panes] == processes
 
 
