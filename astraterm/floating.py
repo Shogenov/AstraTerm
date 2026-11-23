@@ -21,8 +21,8 @@ class FloatingWorkspace(object):
         outer.pack_start(self.body, True, True, 0);self.window.add(outer)
         self.placeholder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.placeholder.set_valign(Gtk.Align.CENTER);self.placeholder.set_halign(Gtk.Align.CENTER)
-        self.placeholder.pack_start(Gtk.Label(label='Вкладка открыта в отдельном окне'), False, False, 0)
-        back = Gtk.Button(label='Вернуть во вкладки')
+        back = Gtk.Button(label='Вернуть вкладку')
+        back.get_style_context().add_class('primary')
         back.connect('clicked', lambda *_: owner.dock_window(workspace))
         self.placeholder.pack_start(back, False, False, 0)
         # Realize both parents before reparenting; remove/add would destroy Gtk.Socket's XID.

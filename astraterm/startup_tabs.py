@@ -35,11 +35,14 @@ def load_workspace(path):
     try:
         with open(path, encoding='utf-8') as stream:
             document = json.load(stream)
-        if isinstance(document, dict) and document.get('remember') is True:
-            return document
+        if isinstance(document, dict):
+            if document.get('remember') is False:
+                return {'remember': False}
+            if document.get('remember') is True:
+                return document
     except (OSError, ValueError, RecursionError):
         pass
-    return {'remember': False}
+    return {'remember': True, 'tabs': [], 'active': 0}
 
 
 def write_workspace(path, remember, tabs=None, active=0):

@@ -3,10 +3,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { promisify, TextDecoder } = require('node:util');
+const { promisify, TextDecoder, isDeepStrictEqual } = require('node:util');
 const { BACKUP_PARAMETERS: P, VAULT_PARAMETERS: V } = require('../shared.cjs');
 const { normalizeDocument } = require('./store.cjs');
 const { safeFilename, protectKeyDirectory, validateIdentity } = require('./identities.cjs');
+const { normalizeAppearance } = require('./appearance.cjs');
 
 const DOCUMENTS = ['sessions.json', 'ssh-profiles.json', 'credentials.vault.json',
   'sidebar.json', 'logging.json', 'known-hosts.json'];
@@ -180,6 +181,10 @@ function captureProfile(directory, documentsDirectory) {
     const settings = JSON.parse(decoder.decode(appearance));
     if (['dark', 'light'].includes(settings?.theme)) payload.theme = settings.theme;
     if (typeof settings?.terminal_clipboard === 'boolean') payload.terminal_clipboard = settings.terminal_clipboard;
+    const visualSettings = normalizeAppearance(settings);
+    for (const key of ['colors', 'panels']) {
+      if (Object.keys(visualSettings[key]).length) payload[key] = visualSettings[key];
+    }
   }
   return payload;
 }
@@ -209,6 +214,12 @@ function validatePayload(payload) {
     if (Object.hasOwn(payload, 'terminal_clipboard')) {
       if (typeof payload.terminal_clipboard !== 'boolean') throw Error();
       checked.terminal_clipboard = payload.terminal_clipboard;
+    }
+    const appearance = normalizeAppearance(payload);
+    for (const key of ['colors', 'panels']) {
+      if (!Object.hasOwn(payload, key)) continue;
+      if (!isDeepStrictEqual(appearance[key], payload[key])) throw Error();
+      checked[key] = appearance[key];
     }
     return checked;
   } catch { throw Error(INVALID); }
@@ -270,7 +281,7 @@ async function readBackup(filename, password) {
 }
 
 async function restoreProfile(root, previous, payload) {
-  const { documents, keys, theme, terminal_clipboard } = validatePayload(payload);
+  const { documents, keys, theme, terminal_clipboard, colors, panels } = validatePayload(payload);
   root = path.resolve(root);
   const parent = path.join(root, PROFILES);
   fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
@@ -301,8 +312,9 @@ async function restoreProfile(root, previous, payload) {
       if (bytes.length > MAX_DOCUMENT) throw Error('Восстановленные настройки превышают допустимый размер.');
       writeNew(path.join(directory, name), bytes);
     }
-    if (theme !== undefined || terminal_clipboard !== undefined)
-      writeNew(path.join(directory, 'appearance.json'), jsonBytes({ theme, terminal_clipboard }));
+    const appearance = { theme, terminal_clipboard, colors, panels };
+    if (Object.values(appearance).some(value => value !== undefined))
+      writeNew(path.join(directory, 'appearance.json'), jsonBytes(appearance));
     // Electron's main process is the only writer. Keep the check and switch synchronous.
     if (activeProfile(root) !== previous) throw Error('Активный профиль изменился. Перезапустите AstraTerm и повторите восстановление.');
     writeNew(temporary, jsonBytes({ directory: id }));

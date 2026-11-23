@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { BrowserWindow, Menu } = require('electron');
-const { separate: contract, floating } = require('./tab-contracts.cjs');
+const { separate: contract, floating, startup } = require('./tab-contracts.cjs');
 
 module.exports = async function checkTabManagement({ window, terminals, files, run, until, delay, check }) {
   const groupFor = id => run(`__astraTest.state.groups.find(g=>g.panes.includes(${JSON.stringify(id)})).id`);
@@ -44,7 +44,7 @@ module.exports = async function checkTabManagement({ window, terminals, files, r
     for (const id of Object.values(ids)) assert.equal(terminals.get(id).process,original[id]);
     await run('delete window.__managementTerms');
   });
-  await check('floating tab preserves xterm, PTY, history and MultiExec selection and returns on native close',async()=>{
+  await check('floating tab preserves xterm, PTY, history and MultiExec selection and returns from the selected tab',async()=>{
     const group=await groupFor(ids.b);const record=terminals.get(ids.b),process=record.process,generation=record.generation;
     await run(`window.__floatingTerm=__astraTest.state.panes.get(${JSON.stringify(ids.b)}).term;void 0`);
     assert.equal(await run(`__astraTest.floatWindow(${JSON.stringify(group)})`),true);
@@ -62,7 +62,14 @@ module.exports = async function checkTabManagement({ window, terminals, files, r
     assert.equal(await run('__astraTest.state.active'),ids.survivor);
     assert.equal(await run(`(()=>{const term=__astraTest.state.panes.get(${JSON.stringify(ids.a)}).term;return Array.from({length:term.buffer.active.length},(_,i)=>term.buffer.active.getLine(i).translateToString()).join('').includes('ASTRA_FLOAT_KEYBOARD_OK')})()`),true);
     await run(`__astraTest.router.enabled=false;__astraTest.router.select(${JSON.stringify(ids.a)},false)`);
-    child.close();await until(()=>run(`!__astraTest.state.groups.find(g=>g.id===${JSON.stringify(group)}).floating`),'Native window close docks the tab');
+    await run(`__astraTest.selectGroup(${JSON.stringify(group)})`);
+    assert.equal(await run('__astraTest.state.activeGroup'),group);
+    assert.equal(await run('document.querySelector(".floating-placeholder button").textContent'),startup.return_label);
+    assert.equal(await run(`(()=>{const b=document.querySelector('.floating-placeholder button').getBoundingClientRect();
+      const w=document.querySelector('#workspace').getBoundingClientRect();
+      return Math.abs((b.left+b.right)/2-(w.left+w.right)/2)<2&&Math.abs((b.top+b.bottom)/2-(w.top+w.bottom)/2)<2})()`),true);
+    await run('document.querySelector(".floating-placeholder button").click()');
+    await until(()=>run(`!__astraTest.state.groups.find(g=>g.id===${JSON.stringify(group)}).floating`),'Return button docks the tab');
     await until(()=>child.isDestroyed(),'Returned presentation window destroyed');
     assert.equal(terminals.get(ids.b).process,process);assert.equal(terminals.get(ids.b).generation,generation);
     assert.equal(await run(`__astraTest.state.panes.get(${JSON.stringify(ids.b)}).term===__floatingTerm`),true);

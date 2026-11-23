@@ -10,6 +10,7 @@ gi.require_version('Gdk','3.0')
 from gi.repository import Gdk, Gtk, GLib
 from astraterm.app import MainWindow
 from astraterm.core import SessionStore,default_session
+from astraterm.ui_helpers import session_status_pixbuf
 from smoke_multiexec import key_event,pump,wait_for
 
 
@@ -31,7 +32,13 @@ def check_startup():
             first = first_tab.active
             wait_for(lambda: bool(first.pid), 'saved local terminal runs')
             live_dot = window.session_tree_store.get_value(row, 6)
-            assert live_dot and live_dot == first_tab.tab_indicator.get_pixbuf()
+            assert live_dot == session_status_pixbuf((True,))
+            duplicate = window.open_session(profile)
+            wait_for(lambda: bool(duplicate.active.pid), 'duplicate runs')
+            duplicate.active.send('exit\n')
+            wait_for(lambda: duplicate.active.exited, 'duplicate ends')
+            assert window.session_tree_store.get_value(row, 6) == session_status_pixbuf(tuple(fixture['duplicate_indicators']))
+            window.close_tab(workspace=duplicate, ask=False)
             first.terminal.event(key_event(first.terminal, Gdk.KEY_d, Gdk.ModifierType.CONTROL_MASK))
             wait_for(lambda: first.exited and not first.pid, 'Ctrl+D closes the shell')
             inactive_dot = window.session_tree_store.get_value(row, 6)
@@ -68,6 +75,16 @@ def check_startup():
             # Snapshot while the workspace is tiled, then load through normal startup.
             window.set_tiled_view(True)
             window._pane_focus(second)
+            window.toggle_sidebar()
+            if window.file_browser.get_visible():
+                window.toggle_files()
+            else:
+                # Exercise an explicit preference even when tiled mode temporarily hides files.
+                window.toggle_files()
+                window.toggle_files()
+            with mock.patch('astraterm.app.confirm', return_value=True) as confirm, mock.patch.object(Gtk, 'main_quit'):
+                assert window._delete_event() is False and window.closed
+                assert confirm.call_count == 1
         finally:
             window.shutdown()
             window.destroy()
@@ -76,6 +93,8 @@ def check_startup():
         reopened = MainWindow(store)
         try:
             reopened.present()
+            assert not reopened.sidebar.get_visible()
+            assert not reopened.file_browser.get_visible()
             wait_for(lambda: reopened.notebook.get_n_pages() == 2 and len(reopened.all_panes()) == 3,
                      'saved tabs and split restored')
             wait_for(lambda: reopened.active_pane().profile['name'] == fixture['second_pane'], 'active tab and pane restored')

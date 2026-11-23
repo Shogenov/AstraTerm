@@ -6,6 +6,7 @@
   --fg: #d9e1e8;
   --muted: #83919d;
   --accent: #82d9bd;
+  --accent-fg: #102b23;
   --line: #283038;
   --sidebar: 220px;
   --files: 290px;
@@ -68,12 +69,13 @@ textarea:focus-visible,
 }
 button.primary {
   background: var(--accent);
-  color: #102b23;
+  color: var(--accent-fg);
   font-weight: 600;
   padding: 8px 14px;
 }
 button.primary:hover {
-  background: #a3e6cf;
+  background: var(--accent);
+  filter: brightness(1.08);
 }
 .icon-button {
   display: inline-flex;
@@ -391,8 +393,8 @@ main {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 .tab.active {
-  background: var(--canvas);
-  color: #e0e9ed;
+  background: var(--accent);
+  color: var(--accent-fg);
   border-bottom-color: var(--accent);
 }
 .tab .label {
@@ -406,6 +408,9 @@ main {
   min-height: 25px;
   padding: 3px;
 }
+.tab.active button { color: inherit; }
+.tab.active button:hover { background: transparent; opacity: .75; }
+.tab.active > .status-dot { box-shadow: 0 0 0 1px var(--accent-fg); }
 .tab button svg {
   width: 14px;
   height: 14px;
@@ -423,7 +428,8 @@ main {
 .tab .status-dot.error {
   background: #df7d85;
 }
-.session-row .status-dot { background: #db9251; margin-left: 3px; }
+.session-status { display: flex; flex: none; flex-wrap: wrap; gap: 4px; max-width: 68px; }
+.session-row .status-dot { background: #db9251; }
 .session-row .status-dot.running { background: #82b99a; }
 .workspace {
   position: relative;
@@ -461,7 +467,7 @@ main {
   flex: 1;
   min-height: 0;
   min-width: 0;
-  background: var(--canvas);
+  background: var(--terminal-bg, var(--canvas));
   overflow: hidden;
 }
 .pane-heading {
@@ -525,13 +531,13 @@ main {
 .terminal-viewport {
   width: 100%;
   height: 100%;
-  background: var(--canvas);
+  background: var(--terminal-bg, var(--canvas));
 }
 .xterm {
   height: 100%;
 }
 .xterm .xterm-viewport {
-  background-color: var(--canvas);
+  background-color: var(--terminal-bg, var(--canvas));
   overflow: hidden;
 }
 .empty-workspace {
@@ -1137,7 +1143,7 @@ dialog.editor-dialog {
 .floating-toolbar { display:flex; gap:16px; align-items:center; padding:8px 12px; flex:none; }
 .floating-title { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
 .floating-workspace { overflow:hidden; }
-.floating-placeholder { margin:auto; text-align:center; color:var(--muted); }
+.floating-placeholder { flex: 1; display: grid; place-items: center; }
 
 @media (prefers-color-scheme: light) {
   :root {
@@ -1153,7 +1159,7 @@ dialog.editor-dialog {
     --selected: #d4eee4;
     --selected-text: #164f40;
   }
-  button, .section-heading strong, .profile-text strong, .tab.active, .empty-workspace h1,
+  button, .section-heading strong, .profile-text strong, .empty-workspace h1,
   .terminal-pane.focused .pane-name, .help-list, .host-stats {
     color: var(--fg);
   }
@@ -1163,8 +1169,8 @@ dialog.editor-dialog {
     color: var(--fg);
   }
   button:disabled { color: var(--muted); }
-  button.primary { background: var(--accent); color: #ffffff; }
-  button.primary:hover { background: #194e40; color: #ffffff; }
+  button.primary { background: var(--accent); color: var(--accent-fg); }
+  button.primary:hover { background: var(--accent); color: var(--accent-fg); }
   .window-controls button:last-child:hover { background: #a83c46; }
   .session-row, .folder-row, .file-row { color: var(--fg); }
   .session-row svg, .folder-row svg, .file-row svg, .folder-chevron, .empty-note, .empty-workspace,
@@ -1173,6 +1179,7 @@ dialog.editor-dialog {
   .field, .form-note, .override-row label, .profile-text small {
     color: var(--muted);
   }
+  .tab.active, .tab.active:hover { background: var(--accent); color: var(--accent-fg); }
   .multi-toggle.active, #overview.active, .multi-bar.broadcast, .session-row.selected,
   .folder-row.selected, .tab.drop-target, .file-row.selected, .profile-row.selected,
   .manager-row.selected, .tag, .help-list kbd {

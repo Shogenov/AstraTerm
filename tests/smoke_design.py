@@ -175,6 +175,13 @@ def check_theme(window, panes):
             clipboard = next(item for item in dialog.get_content_area().get_children()
                              if isinstance(item, Gtk.CheckButton) and 'выделение' in item.get_label())
             clipboard.set_active(theme == 'light')
+            if theme == 'light':
+                grid = next(item for item in dialog.get_content_area().get_children() if isinstance(item, Gtk.Grid))
+                for child in grid.get_children():
+                    if isinstance(child, Gtk.ColorButton) and child.get_title() in ('Акцент кнопок и активной вкладки', 'Фон терминала'):
+                        color = Gdk.RGBA()
+                        color.parse('#27518a' if child.get_title().startswith('Акцент') else '#eeeeee')
+                        child.set_rgba(color)
             dialog.response(Gtk.ResponseType.OK)
             return False
 
@@ -189,7 +196,14 @@ def check_theme(window, panes):
         padding = body.get_style_context().get_background_color(body.get_state_flags())
         assert surface.equal(padding) and minimum <= padding.red <= maximum, (theme, surface, padding)
         with open(window.appearance_path, encoding='utf-8') as stream:
-            assert json.load(stream) == {'theme': theme, 'terminal_clipboard': theme == 'light'}
+            appearance = json.load(stream)
+        assert appearance['theme'] == theme and appearance['terminal_clipboard'] == (theme == 'light')
+        assert appearance['colors']['light'] == {'accent': '#27518a', 'terminal_background': '#eeeeee'}
+        tab = window.current_workspace().tab_header
+        color = tab.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
+        accent = Gdk.RGBA()
+        accent.parse('#27518a' if theme == 'light' else '#82d9bd')
+        assert color.equal(accent), (color, accent)
         assert all(pane.terminal_clipboard == (theme == 'light') for pane in panes)
         assert window.theme == theme and [pane.pid for pane in panes] == processes
 

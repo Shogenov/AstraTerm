@@ -67,19 +67,24 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
       assert.equal(await run('__astraTest.state.rememberTabs'), fixture.remember_default);
       const profile = { id: fixture.saved_id, protocol: 'local', name: fixture.initial_name };
       await run(`astra.invoke('session:save', {record:${JSON.stringify(profile)}})`);
-      const dot = `document.querySelector('[data-sidebar-id="session:${profile.id}"] .status-dot')`;
-      assert.equal(await run(dot + '.hidden'), true);
+      const indicators = `document.querySelector('[data-sidebar-id="session:${profile.id}"] .session-status')`;
+      assert.equal(await run(indicators + '.hidden'), true);
       const first = await run(`__astraTest.openSession(${JSON.stringify(profile)}).then(item=>item.id)`);
-      assert.equal(await run(`${dot}.classList.contains('running') && !${dot}.hidden`), true);
+      const duplicate = await run(`__astraTest.openSession(${JSON.stringify(profile)}).then(item=>item.id)`);
+      await until(() => terminals.get(duplicate)?.status === 'running', 'Duplicate session starts');
+      terminals.write(duplicate, 'exit\r');
+      await until(() => terminals.get(duplicate)?.status === 'exited', 'Duplicate session ends');
+      assert.deepEqual(await run(`Array.from(${indicators}.children,dot=>dot.classList.contains('running'))`),
+        fixture.duplicate_indicators);
+      await run(`__astraTest.closePane(${JSON.stringify(duplicate)},false); __astraTest.focusPane(${JSON.stringify(first)})`);
       const added = await run(`__astraTest.openSession({protocol:'local',name:${JSON.stringify(fixture.second_pane)}},
         {groupId:__astraTest.state.activeGroup,orientation:'vertical'}).then(item=>item.id)`);
       const last = await run(`__astraTest.openSession({protocol:'local',name:${JSON.stringify(fixture.last_tab)}}).then(item=>item.id)`);
       await run(`__astraTest.focusPane(${JSON.stringify(added)}); __astraTest.action('settings')`);
       await until(() => run('!!document.querySelector("dialog[open]")'), 'Settings dialog missing');
-      await run(`(()=>{const d=document.querySelector('dialog[open]');
-        [...d.querySelectorAll('label')].find(label=>label.textContent.includes('Запоминать вкладки')).querySelector('input').click();
-        d.querySelector('.primary').click()})()`);
-      await until(() => run('__astraTest.state.rememberTabs && !document.querySelector("dialog[open]")'), 'Remember tabs setting did not save');
+      assert.equal(await run(`[...document.querySelectorAll('dialog[open] label')]
+        .find(label=>label.textContent.includes('Запоминать вкладки')).querySelector('input').checked`), true);
+      await run(`document.querySelector('dialog[open]').close()`);
       await saveOpenTabs();
       const saved = (await run('astra.invoke("bootstrap")')).workspace;
       assert.deepEqual(saved.tabs[0].panes[0], { session: profile.id });
@@ -89,7 +94,7 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
       await run(`document.querySelector('.tab.active [aria-label="Закрыть вкладку"]').click()`);
       await until(() => !terminals.get(first) && !terminals.get(added), 'Tab cross did not close both panes');
       assert.equal(await run('!!document.querySelector("dialog[open]")'), false);
-      assert.equal(await run(dot + '.hidden'), true);
+      assert.equal(await run(indicators + '.hidden'), true);
       await run(`__astraTest.closePane(${JSON.stringify(last)},false)`);
       await run(`astra.invoke('session:save', {record:${JSON.stringify({...profile, name:fixture.updated_name})}})`);
       await run(`__astraTest.restoreOpenTabs(${JSON.stringify(saved)})`);
@@ -100,6 +105,17 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
       await run(`Promise.all([...__astraTest.state.panes.keys()].map(id=>__astraTest.closePane(id,false)))`);
       await run(`astra.invoke('session:delete',{id:${JSON.stringify(profile.id)}})`);
       await run(`astra.invoke('app:rememberTabs',{remember:false}).then(value=>{__astraTest.state.rememberTabs=value;})`);
+    });
+    await check('side panel visibility is restored on a fresh renderer startup', async () => {
+      await run(`Promise.all([__astraTest.action('toggle-sidebar'),__astraTest.action('toggle-files')])`);
+      assert.deepEqual((await run('astra.invoke("bootstrap")')).appearance.panels, { sidebar: false, files: false });
+      const loaded = new Promise(resolve => window.webContents.once('did-finish-load', resolve));
+      window.webContents.reload();
+      await loaded;
+      await until(() => run('Boolean(window.__astraTest?.state.workspaceReady)'), 'Renderer reloaded');
+      assert.equal(await run("['sidebar','files-panel','sidebar-resize','files-resize'].every(id=>document.getElementById(id).hidden)"), true);
+      assert.equal(await run('__astraTest.state.rememberTabs'), false);
+      await run(`Promise.all([__astraTest.action('toggle-sidebar'),__astraTest.action('toggle-files')])`);
     });
     await run('__astraTest.openSession()');
     const initial = await run('[...__astraTest.state.panes.keys()][0]');
@@ -124,13 +140,29 @@ module.exports = async function smoke({ window, store, vault, terminals, files, 
       for (const [theme, background, rgb] of [['light', '#ffffff', 'rgb(255, 255, 255)'], ['dark', '#101316', 'rgb(16, 19, 22)']]) {
         await run('__astraTest.action("settings")');
         await until(() => run('Boolean(document.querySelector("dialog[open] [name=theme]"))'), 'Theme setting missing');
-        await run(`document.querySelector('dialog[open] [name=theme]').value='${theme}';document.querySelector('dialog[open] .primary').click()`);
+        await run(`(()=>{const d=document.querySelector('dialog[open]');const theme=d.querySelector('[name=theme]');
+          theme.value='${theme}';theme.dispatchEvent(new Event('change'));d.querySelector('.primary').click()})()`);
         await until(() => run(`!document.querySelector('dialog[open]')&&matchMedia('(prefers-color-scheme: ${theme})').matches`), 'Theme did not apply');
         assert.equal(await run(`${terminal} === window.initialThemeTerminal && ${terminal}.options.theme.background === '${background}'`), true);
         assert.equal(await run(`getComputedStyle(${terminal}.element.querySelector('.xterm-viewport')).backgroundColor`), rgb);
         assert.equal(await run(`getComputedStyle(${terminal}.element.querySelector('.xterm-viewport')).overflowX`), 'hidden');
         assert.equal(JSON.parse(fs.readFileSync(themeFile, 'utf8')).theme, theme);
       }
+      await run('__astraTest.action("settings")');
+      await until(() => run('Boolean(document.querySelector("dialog[open] [name=accent]"))'), 'Color setting missing');
+      await run(`document.querySelector('dialog[open] [name=accent]').value='#27518a';
+        document.querySelector('dialog[open] [name=terminal_background]').value='#283444';
+        document.querySelector('dialog[open] .primary').click()`);
+      await until(() => run("!document.querySelector('dialog[open]')"), 'Custom colors saved');
+      assert.equal(await run("getComputedStyle(document.querySelector('.tab.active')).backgroundColor"), 'rgb(39, 81, 138)');
+      assert.equal(await run(`${terminal}.options.theme.background`), '#283444');
+      assert.equal(JSON.parse(fs.readFileSync(themeFile, 'utf8')).colors.dark.accent, '#27518a');
+      await run('__astraTest.action("settings")');
+      await until(() => run('Boolean(document.querySelector("dialog[open] [name=accent]"))'), 'Reset setting missing');
+      await run(`[...document.querySelectorAll('dialog[open] button')].find(b=>b.textContent==='Сбросить цвета темы').click();
+        document.querySelector('dialog[open] .primary').click()`);
+      await until(() => run("!document.querySelector('dialog[open]')"), 'Custom colors reset');
+      assert.equal(await run(`${terminal}.options.theme.background`), '#101316');
       await run('delete window.initialThemeTerminal');
     });
     await check('update download progress and verification render in the desktop window', async () => {

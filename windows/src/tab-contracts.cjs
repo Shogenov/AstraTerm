@@ -3,13 +3,18 @@
 module.exports = {
   "description": "Drop moves the entire source tab to the right of the target, preserving terminal handles; middle closes the whole tab without confirmation.",
   "startup": {
-    "remember_default": false,
+    "remember_default": true,
     "local_default": false,
     "saved_id": "workspace-saved-fixture",
     "initial_name": "\u041f\u0435\u0440\u0432\u044b\u0439 \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0439 \u0442\u0435\u0440\u043c\u0438\u043d\u0430\u043b",
     "updated_name": "\u041e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 \u0442\u0435\u0440\u043c\u0438\u043d\u0430\u043b",
     "second_pane": "\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u0430\u044f \u043f\u0430\u043d\u0435\u043b\u044c",
-    "last_tab": "\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u044f\u044f \u0432\u043a\u043b\u0430\u0434\u043a\u0430"
+    "last_tab": "\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u044f\u044f \u0432\u043a\u043b\u0430\u0434\u043a\u0430",
+    "duplicate_indicators": [
+      true,
+      false
+    ],
+    "return_label": "\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432\u043a\u043b\u0430\u0434\u043a\u0443"
   },
   "ended_session": {
     "restart_key": "r",

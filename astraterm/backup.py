@@ -13,6 +13,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from ._shared import BACKUP_PARAMETERS as P, VAULT_PARAMETERS as V
+from .appearance import normalize_appearance
 from .core import _config_lock, _normalize_document
 from .profile_location import MARKER, PROFILES, active_profile
 from .ssh_profiles import ProfileStore
@@ -182,6 +183,10 @@ def capture_profile(directory):
                 payload['theme'] = appearance['theme']
             if isinstance(appearance.get('terminal_clipboard'), bool):
                 payload['terminal_clipboard'] = appearance['terminal_clipboard']
+            settings = normalize_appearance(appearance)
+            for key in ('colors', 'panels'):
+                if settings[key]:
+                    payload[key] = settings[key]
     return payload
 
 
@@ -214,6 +219,12 @@ def _validate_payload(payload):
             if not isinstance(payload['terminal_clipboard'], bool):
                 raise ValueError()
             checked['terminal_clipboard'] = payload['terminal_clipboard']
+        settings = normalize_appearance(payload)
+        for key in ('colors', 'panels'):
+            if key in payload:
+                if settings[key] != payload[key]:
+                    raise ValueError()
+                checked[key] = settings[key]
         return checked
     except (KeyError, ValueError, TypeError):
         raise ValueError(INVALID) from None
@@ -300,7 +311,7 @@ def restore_profile(root, previous, payload):
             if len(data) > MAX_DOCUMENT:
                 raise ValueError('Восстановленные настройки превышают допустимый размер.')
             _write_new(os.path.join(directory, name), data)
-        appearance = {key: payload[key] for key in ('theme', 'terminal_clipboard') if key in payload}
+        appearance = {key: payload[key] for key in ('theme', 'terminal_clipboard', 'colors', 'panels') if key in payload}
         if appearance:
             _write_new(os.path.join(directory, 'appearance.json'), _json_bytes(appearance))
 

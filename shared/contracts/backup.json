@@ -30,5 +30,10 @@
   },
   "sidebar": {"collapsed": ["fixture-group"]},
   "logging": {"enabled": true, "level": "debug"},
-  "appearance": {"theme": "light", "terminal_clipboard": true}
+  "appearance": {
+    "theme": "light",
+    "terminal_clipboard": true,
+    "colors": {"light": {"accent": "#254986"}, "dark": {"terminal_background": "#101b2a"}},
+    "panels": {"sidebar": false, "files": true}
+  }
 }

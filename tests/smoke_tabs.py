@@ -179,7 +179,7 @@ def management(pointer, contract):
             window.shutdown();window.destroy();pump(.1)
 
 
-def merged_floating(pointer, contract):
+def merged_floating(pointer, contract, return_label):
     with tempfile.TemporaryDirectory(prefix='astraterm-merged-floating-') as directory:
         window = MainWindow(SessionStore(os.path.join(directory, 'sessions.json')), start_local=False)
         try:
@@ -240,7 +240,10 @@ def merged_floating(pointer, contract):
                 assert floating.window.get_focus() is pane.terminal
                 pane.send('merged-floating-input')
                 wait_for(lambda: b'merged-floating-input' in read_bytes(path), 'floating PTY still accepts input')
-            floating.window.close()
+            window.notebook.set_current_page(window.notebook.page_num(target))
+            button = floating.placeholder.get_children()[0]
+            assert button.get_label() == return_label
+            button.clicked()
             pump(.5)
             assert target not in window.floating_windows
             assert_layout(target, window)
@@ -260,7 +263,7 @@ def main():
         contracts = json.load(stream)
     pointer = Pointer()
     try:
-        merged_floating(pointer, contracts['floating']['merged'])
+        merged_floating(pointer, contracts['floating']['merged'], contracts['startup']['return_label'])
         for case in contracts['merges']:
             with tempfile.TemporaryDirectory(prefix='astraterm-tabs-') as directory:
                 window = MainWindow(SessionStore(os.path.join(directory, 'sessions.json')), start_local=False)

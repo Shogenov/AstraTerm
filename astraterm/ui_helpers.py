@@ -1,5 +1,6 @@
 """Small GTK 3.22 helpers for session icons and the tab strip."""
 from __future__ import unicode_literals
+from functools import lru_cache
 
 
 import gi
@@ -92,6 +93,24 @@ def action_image(name):
 def status_pixbuf(running):
     color = "#82b99a" if running else "#db9251"
     return _colored_pixbuf("status:" + color, '<circle cx="12" cy="12" r="4" fill="' + color + '"/>')
+
+
+@lru_cache(maxsize=128)
+def session_status_pixbuf(states):
+    if not states:
+        return None
+    columns = 8
+    width = min(len(states), columns) * 9
+    height = ((len(states) + columns - 1) // columns) * 9
+    dots = ['<circle cx="{}" cy="{}" r="2.5" fill="{}"/>'.format(
+        4 + index % columns * 9, 4 + index // columns * 9,
+        '#82b99a' if running else '#db9251') for index, running in enumerate(states)]
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}">{}</svg>'.format(
+        width, height, ''.join(dots))
+    loader = GdkPixbuf.PixbufLoader.new_with_type('svg')
+    loader.write(svg.encode('ascii'))
+    loader.close()
+    return loader.get_pixbuf()
 
 
 def _translated(widget, parent, x=0, y=0):

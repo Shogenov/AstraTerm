@@ -12,7 +12,7 @@ function reference(profile, saved) {
 function readWorkspace(filename) {
   try {
     const document = JSON.parse(fs.readFileSync(filename, 'utf8'));
-    if (document?.remember !== true) return { remember: false, tabs: [], active: 0 };
+    if (document?.remember === false) return { remember: false, tabs: [], active: 0 };
     const tabs = (Array.isArray(document.tabs) ? document.tabs : []).map(tab => ({
       orientation: tab?.orientation === 'vertical' ? 'vertical' : 'horizontal',
       active: Number.isSafeInteger(tab?.active) ? tab.active : 0,
@@ -24,7 +24,7 @@ function readWorkspace(filename) {
     }));
     return { remember: true, tabs, active: Number.isSafeInteger(document.active) ? document.active : 0 };
   } catch {
-    return { remember: false, tabs: [], active: 0 };
+    return { remember: true, tabs: [], active: 0 };
   }
 }
 

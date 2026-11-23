@@ -18,6 +18,8 @@ from . import __version__
 from .core import (SessionStore, _atomic_json, _config_lock, default_session, validate_session, session_argv,
                    parse_ssh_config, detect_dependencies, tcp_probe, tunnel_argv)
 from .terminal import TerminalPane, TerminalWorkspace
+from .appearance import (COLORS, COLOR_LABELS, accent_foreground, normalize_appearance,
+                         palette, read_appearance)
 from .terminal_directory import UNKNOWN_DIRECTORY
 from .floating import FloatingWorkspace
 from .dialogs import SessionDialog, MacroDialog, error, confirm, name_dialog
@@ -30,7 +32,8 @@ from .group_dialogs import GroupDialog
 from .vault import CredentialVault
 from .host_stats_ui import HostStatsBar
 from .import_dialogs import CredentialController
-from .ui_helpers import protocol_icon, platform_pixbuf, group_icon, TabStrip, action_image, status_pixbuf
+from .ui_helpers import (protocol_icon, platform_pixbuf, group_icon, TabStrip, action_image,
+                         status_pixbuf, session_status_pixbuf)
 from .startup_tabs import load_workspace, write_workspace, pane_reference, resolve_pane, project_layout, layout_leaves
 from .update_ui import UpdateController
 from .diagnostic_log import DiagnosticLog
@@ -76,17 +79,11 @@ class MainWindow(Gtk.Window):
         self.workspace_path = os.path.join(directory, 'workspace.json')
         startup_workspace = load_workspace(self.workspace_path)
         self.remember_tabs = startup_workspace['remember']
+        self._restoring_tabs = bool(startup_workspace.get('tabs')) and not initial_session and not start_local
         self.appearance_path = os.path.join(directory, 'appearance.json')
-        self.theme = 'dark'
-        self.terminal_clipboard = False
-        try:
-            with open(self.appearance_path, encoding='utf-8') as stream:
-                appearance = json.load(stream)
-            if appearance.get('theme') == 'light':
-                self.theme = 'light'
-            self.terminal_clipboard = appearance.get('terminal_clipboard') is True
-        except (OSError, ValueError, AttributeError):
-            pass
+        self.appearance = read_appearance(self.appearance_path)
+        self.theme = self.appearance['theme']
+        self.terminal_clipboard = self.appearance['terminal_clipboard']
         self.diagnostic_log = DiagnosticLog(os.path.dirname(self.store.path))
         self.diagnostic_log.write('info', 'app.start')
         self._sidebar_path = os.path.join(os.path.dirname(self.store.path), 'sidebar.json')
@@ -188,6 +185,12 @@ class MainWindow(Gtk.Window):
                 (self.sidebar, self.sidebar_toggle, 'панель подключений'),
                 (self.file_browser, self.files_toggle, 'файловую панель')):
             panel.connect('notify::visible', self._sync_panel_toggle, control, label)
+        for key, panel, control, label in (
+                ('sidebar', self.sidebar, self.sidebar_toggle, 'панель подключений'),
+                ('files', self.file_browser, self.files_toggle, 'файловую панель')):
+            if not self.appearance['panels'].get(key, True):
+                self._set_panel_visible(panel, False)
+                self._sync_panel_toggle(panel, None, control, label)
         status = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         status.set_border_width(0)
         status.get_style_context().add_class("statusbar")
@@ -243,25 +246,48 @@ class MainWindow(Gtk.Window):
         if self.theme == 'light':
             with open(os.path.join(style_dir, 'style-light.css'), 'rb') as stream:
                 styles += b'\n' + stream.read()
+        colors = palette(self.theme, self.appearance['colors'])
+        styles += ('''
+            @define-color terminal_background {terminal_background};
+            @define-color app_accent {accent};
+            @define-color app_accent_fg {foreground};
+            button.primary, button.suggested-action, .workspace-tab.active-tab {{
+                background-color: @app_accent; color: @app_accent_fg;
+            }}
+            button.primary:hover, button.suggested-action:hover {{
+                background-color: @app_accent; color: @app_accent_fg; border-color: @app_accent_fg;
+            }}
+            .workspace-tab.active-tab {{ border-bottom-color: @app_accent; }}
+            .brand-mark, .active-pane .terminal-focus-marker {{ color: @app_accent; }}
+            .upload-notice progressbar progress {{ background-color: @app_accent; }}
+            '''.format(foreground=accent_foreground(colors['accent']), **colors)).encode('ascii')
         Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", self.theme == 'dark')
         self._style_provider.load_from_data(styles)
 
-    def _set_appearance(self, theme, terminal_clipboard):
+    def _write_appearance(self, document):
+        with _config_lock(self.appearance_path):
+            _atomic_json(self.appearance_path, document)
+        self.appearance = document
+
+    def _set_appearance(self, theme, terminal_clipboard, colors=None):
         if theme not in ('dark', 'light'):
             raise ValueError('Неизвестная тема оформления.')
-        if theme == self.theme and terminal_clipboard == self.terminal_clipboard:
+        next_appearance = dict(self.appearance, theme=theme, terminal_clipboard=terminal_clipboard)
+        if colors is not None:
+            next_appearance['colors'] = colors
+        next_appearance = normalize_appearance(next_appearance)
+        if next_appearance == self.appearance:
             return
-        with _config_lock(self.appearance_path):
-            _atomic_json(self.appearance_path, {'theme': theme, 'terminal_clipboard': terminal_clipboard})
-        theme_changed = self.theme != theme
+        visual_changed = theme != self.theme or next_appearance['colors'] != self.appearance['colors']
+        self._write_appearance(next_appearance)
         self.theme = theme
         self.terminal_clipboard = terminal_clipboard
-        if theme_changed:
+        if visual_changed:
             self._load_style()
         for pane in self.all_panes():
-            if theme_changed and hasattr(pane, 'set_theme'):
-                pane.set_theme(theme)
             if isinstance(pane, TerminalPane):
+                if visual_changed:
+                    pane.set_theme(theme, self.appearance['colors'])
                 pane.terminal_clipboard = terminal_clipboard
 
     def _menu(self):
@@ -397,9 +423,8 @@ class MainWindow(Gtk.Window):
 
     def _register_pane(self, pane):
         pane.on_reconnect = self.reconnect_pane
-        if hasattr(pane, 'set_theme'):
-            pane.set_theme(self.theme)
         if isinstance(pane, TerminalPane):
+            pane.set_theme(self.theme, self.appearance['colors'])
             pane.terminal_clipboard = self.terminal_clipboard
         self.multiexec.register(pane)
         if not hasattr(pane, "pane_drag_id"):
@@ -814,7 +839,7 @@ class MainWindow(Gtk.Window):
                 return self._overview_active
             return next(iter(self._terminal_panes()), None)
         workspace = self.current_workspace()
-        return workspace.active if workspace else None
+        return workspace.active if workspace and workspace not in self.floating_windows else None
 
     def _pane_focus(self, pane):
         if self._layout_input_suspended or pane.closed:
@@ -853,11 +878,15 @@ class MainWindow(Gtk.Window):
         if not self._tiles_wanted and not self._layout_input_suspended and getattr(page, "active", None):
             def focus_after_switch():
                 if (not self.closed and not self._tiles_wanted and not self._layout_input_suspended and
-                        self.current_workspace() is page and page not in self.floating_windows and
-                        page.active and not page.active.closed):
-                    self._pane_focus(page.active)
-                    if isinstance(page.active, TerminalPane) and page.active.terminal.get_mapped():
-                        page.active.terminal.grab_focus()
+                        self.current_workspace() is page):
+                    if page in self.floating_windows:
+                        self._overview_active = None
+                        self._sync_file_browser(None)
+                        self.connection_info.set_text("Отдельное окно")
+                    elif page.active and not page.active.closed:
+                        self._pane_focus(page.active)
+                        if isinstance(page.active, TerminalPane) and page.active.terminal.get_mapped():
+                            page.active.terminal.grab_focus()
                 return False
             GLib.idle_add(focus_after_switch)
 
@@ -1765,13 +1794,16 @@ class MainWindow(Gtk.Window):
                 continue
             if workspace is current:
                 active = len(tabs)
-            tabs.append({'panes': references, 'layout': workspace.capture_layout(),
+            floating = self.floating_windows.get(workspace)
+            root = floating.body.get_children()[0] if floating else None
+            tabs.append({'panes': references, 'layout': workspace.capture_layout(root),
                          'active': workspace.panes.index(workspace.active)})
         write_workspace(self.workspace_path, True, tabs, active)
 
     def _restore_startup_tabs(self, document):
         tabs = document.get('tabs')
         if not isinstance(tabs, list) or not tabs:
+            self._restoring_tabs = False
             return False
         sessions = {item['id']: item for item in self.store.sessions}
         restored = {}
@@ -1780,6 +1812,7 @@ class MainWindow(Gtk.Window):
             if self.closed:
                 return False
             if index == len(tabs):
+                self._restoring_tabs = False
                 desired = document.get('active')
                 target = restored.get(desired) if type(desired) is int else None
                 if target is not None and self.notebook.page_num(target) >= 0:
@@ -1846,9 +1879,9 @@ class MainWindow(Gtk.Window):
             for pane in workspace.panes:
                 if not pane.closed:
                     identifier = pane.profile.get('id')
-                    states[identifier] = states.get(identifier, False) or bool(pane.pid)
+                    states.setdefault(identifier, []).append(bool(pane.pid))
         for identifier, row in self._session_rows.items():
-            pixbuf = status_pixbuf(states[identifier]) if identifier in states else None
+            pixbuf = session_status_pixbuf(tuple(states.get(identifier, ())))
             if self.session_tree_store.get_value(row, 6) != pixbuf:
                 self.session_tree_store.set_value(row, 6, pixbuf)
 
@@ -1982,18 +2015,28 @@ class MainWindow(Gtk.Window):
         return workspace
 
     def toggle_files(self, *_):
-        if self._tiles_wanted:
+        if self._toggle_panel('files', self.file_browser) and self._tiles_wanted:
             self._overview_files_visible = None
-        self._toggle(self.file_browser)
 
     def toggle_sidebar(self, *_):
-        self._toggle(self.sidebar)
+        self._toggle_panel('sidebar', self.sidebar)
 
     @staticmethod
-    def _toggle(widget):
-        visible = not widget.get_visible()
+    def _set_panel_visible(widget, visible):
         widget.set_no_show_all(not visible)
         widget.set_visible(visible)
+
+    def _toggle_panel(self, key, widget):
+        visible = not widget.get_visible()
+        panels = dict(self.appearance['panels'])
+        panels[key] = visible
+        try:
+            self._write_appearance(dict(self.appearance, panels=panels))
+        except OSError as exc:
+            error(self, "Не удалось сохранить состояние панели", exc)
+            return False
+        self._set_panel_visible(widget, visible)
+        return True
 
     @staticmethod
     def _sync_panel_toggle(panel, _property, control, label):
@@ -2100,6 +2143,51 @@ class MainWindow(Gtk.Window):
         theme.set_active_id(self.theme)
         box.add(Gtk.Label(label='Тема оформления', xalign=0))
         box.add(theme)
+        color_grid = Gtk.Grid(column_spacing=12, row_spacing=4)
+        picker_theme = [self.theme]
+        colors = {key: value.copy() for key, value in self.appearance['colors'].items()}
+        pickers = {}
+        for row, (key, title) in enumerate(COLOR_LABELS):
+            label = Gtk.Label(label=title, xalign=0, hexpand=True)
+            picker = Gtk.ColorButton()
+            picker.set_title(title)
+            picker.get_accessible().set_name(title)
+            color_grid.attach(label, 0, row, 1, 1)
+            color_grid.attach(picker, 1, row, 1, 1)
+            pickers[key] = picker
+        box.add(color_grid)
+
+        def read_colors():
+            current_theme = picker_theme[0]
+            selected = {}
+            for key, picker in pickers.items():
+                color = picker.get_rgba()
+                value = '#{:02x}{:02x}{:02x}'.format(*(round(channel * 255) for channel in
+                                                       (color.red, color.green, color.blue)))
+                if value != COLORS[current_theme][key]:
+                    selected[key] = value
+            colors[current_theme] = selected
+
+        def display_colors():
+            for key, value in palette(picker_theme[0], colors).items():
+                color = Gdk.RGBA()
+                color.parse(value)
+                pickers[key].set_rgba(color)
+
+        def change_theme(widget):
+            read_colors()
+            picker_theme[0] = widget.get_active_id()
+            display_colors()
+
+        def reset_colors(*_):
+            colors.pop(picker_theme[0], None)
+            display_colors()
+
+        display_colors()
+        theme.connect('changed', change_theme)
+        reset = Gtk.Button(label='Сбросить цвета темы', halign=Gtk.Align.START)
+        reset.connect('clicked', reset_colors)
+        box.add(reset)
         enabled = Gtk.CheckButton(label='Записывать диагностический журнал', active=diagnostic_log.enabled)
         levels = Gtk.ComboBoxText()
         for key, title in (('error', 'Ошибки'), ('warning', 'Предупреждения'), ('info', 'Информация'), ('debug', 'Отладка')):
@@ -2123,7 +2211,8 @@ class MainWindow(Gtk.Window):
         while dialog.run() == Gtk.ResponseType.OK:
             try:
                 diagnostic_log.configure(enabled.get_active(), levels.get_active_id())
-                self._set_appearance(theme.get_active_id(), terminal_clipboard.get_active())
+                read_colors()
+                self._set_appearance(theme.get_active_id(), terminal_clipboard.get_active(), colors)
                 if self.remember_tabs != remember.get_active():
                     write_workspace(self.workspace_path, remember.get_active())
                     self.remember_tabs = remember.get_active()
@@ -2266,27 +2355,34 @@ class MainWindow(Gtk.Window):
         if not self.file_browser.request_close():
             return True
         active = any(pane.pid for i in range(self.notebook.get_n_pages()) for pane in self.notebook.get_nth_page(i).panes)
-        if active and not confirm(self, "Закрыть AstraTerm и завершить подключения?",
-                                  "Все терминалы и SSH-туннели этого окна будут закрыты."):
+        detail = "Все терминалы и SSH-туннели этого окна будут закрыты."
+        if self.remember_tabs:
+            detail += "\nПри следующем запуске AstraTerm откроет сохранённые вкладки."
+        if active and not confirm(self, "Закрыть AstraTerm и завершить подключения?", detail):
             return True
-        self.shutdown()
+        if not self.shutdown(require_workspace=True):
+            return True
         Gtk.main_quit()
         return False
 
-    def shutdown(self):
+    def shutdown(self, require_workspace=False):
         if self.closed:
-            return
+            return True
         current = self.current_workspace()
-        for workspace in list(self.floating_windows):
-            self.dock_window(workspace)
-        if self.tiled.active:
-            self.tiled.leave()
-        if self.remember_tabs:
+        wanted = self._suspend_tiling()
+        if self.remember_tabs and not self._restoring_tabs:
             try:
                 self._save_startup_tabs(current)
-            except (OSError, ValueError):
+            except (OSError, ValueError) as exc:
                 self.diagnostic_log.write('warning', 'workspace.save-failed')
+                if require_workspace:
+                    self._resume_tiling(wanted)
+                    error(self, "Не удалось сохранить вкладки", exc)
+                    return False
         self.closed = True
+        for floating in self.floating_windows.values():
+            floating.dock()
+        self.floating_windows.clear()
         self.host_stats.close()
         self.credential_vault.lock()
         for request in list(self._identity_jobs):
@@ -2302,6 +2398,7 @@ class MainWindow(Gtk.Window):
         Gtk.StyleContext.remove_provider_for_screen(Gdk.Screen.get_default(), self._style_provider)
         for i in range(self.notebook.get_n_pages()):
             self.notebook.get_nth_page(i).close()
+        return True
 
 
 def main():

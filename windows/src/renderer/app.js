@@ -37,6 +37,8 @@ function iconButton(name, title, callback) {
 }
 const state = {
   theme: "dark",
+  colors: {},
+  workspaceReady: false,
   terminalClipboard: false,
   rememberTabs: false,
   store: { sessions: [], groups: [], macros: [], tunnels: [] },
@@ -273,7 +275,7 @@ function renderSessions() {
     row.append(
       icon(profileIcon(profile)),
       el("span", { class: "session-name", text: profile.name }),
-      el("span", { class: "status-dot", hidden: true, role: "img" }),
+      el("span", { class: "session-status", hidden: true }),
     );
     row.addEventListener("click", () => {
       row.focus({ preventScroll: true });
@@ -324,21 +326,36 @@ function syncSessionIndicators() {
   const sessions = new Map();
   for (const pane of state.panes.values()) {
     const id = pane.profile.id;
-    sessions.set(id, sessions.get(id) || pane.status === "running");
+    if (!sessions.has(id)) sessions.set(id, []);
+    sessions.get(id).push(pane.status === "running");
   }
   for (const row of document.querySelectorAll('.session-row[data-sidebar-id]')) {
-    const dot = row.querySelector('.status-dot');
+    const indicators = row.querySelector('.session-status');
     const id = row.dataset.sidebarId.slice('session:'.length);
-    const running = Boolean(sessions.get(id));
-    dot.hidden = !sessions.has(id);
-    dot.classList.toggle('running', running);
-    dot.setAttribute('aria-label', running ? 'Подключено' : 'Соединение неактивно');
+    const states = sessions.get(id) || [];
+    const signature = states.map(Number).join('');
+    if (indicators.dataset.states === signature) continue;
+    indicators.dataset.states = signature;
+    indicators.hidden = !states.length;
+    indicators.replaceChildren(...states.map(running => el("span", {
+      class: running ? "status-dot running" : "status-dot",
+      role: "img", "aria-label": running ? "Подключено" : "Соединение неактивно",
+    })));
   }
 }
 function selectGroup(id) {
   const group = state.groups.find((item) => item.id === id);
   if (!group) return;
-  group.floating?.window.focus();
+  if (group.floating) {
+    state.activeGroup = group.id;
+    state.active = null;
+    $("connection-info").textContent = "Отдельное окно";
+    renderLayout();
+    syncRdpBounds();
+    syncFiles().catch(showError);
+    void hostStats.refresh();
+    return;
+  }
   focusPane(group.active || group.panes[0]);
 }
 const TAB_DRAG_TYPE = "application/x-astraterm-tab";
@@ -493,6 +510,7 @@ async function floatWindow(id) {
     floating.container=child.document.getElementById("floating-workspace");
     if(!floating.container)throw new Error("Не удалось подготовить отдельное окно.");
     child.document.title=title+" · AstraTerm";
+    applyAccent(child.document);
     child.document.getElementById("floating-toolbar").append(
       el("span",{text:title,class:"floating-title"}),
       el("button",{text:"Вернуть во вкладки",onclick:command(()=>dockWindow(id))}));
@@ -502,7 +520,10 @@ async function floatWindow(id) {
     await api.invoke("ui:floatReady",{token:floating.token});
     for(const paneId of group.panes)state.panes.get(paneId).nativeBounds=null;
     const docked = state.groups.find(item => !item.floating);
-    if (state.activeGroup === id && docked) focusPane(docked.active, false);
+    if (state.activeGroup === id) {
+      if (docked) focusPane(docked.active, false);
+      else selectGroup(id);
+    }
     renderLayout();child.focus();focusPane(group.active);return true;
   }catch(error){if(!group.floating)return false;await dockWindow(id);throw error;}
 }
@@ -650,8 +671,8 @@ function renderLayout() {
   if (state.overview) {
     for (const pane of state.panes.values()) if(pane.profile.protocol !== "rdp" && !state.groups.find(group=>group.panes.includes(pane.id))?.floating) adoptPaneView(pane,workspace);
   } else if (group?.floating) {
-    workspace.append(el("div",{class:"floating-placeholder"},el("p",{text:"Вкладка открыта в отдельном окне"}),
-      el("button",{text:"Вернуть во вкладки",onclick:command(()=>dockWindow(group.id))})));
+    workspace.append(el("div",{class:"floating-placeholder"},
+      el("button",{text:"Вернуть вкладку",class:"primary",onclick:command(()=>dockWindow(group.id))})));
   } else if (group) {
     const container = el("div", { class: "panel-group " + group.orientation });
     for (const id of group.panes) {
@@ -824,15 +845,19 @@ function bindRangeSelection(pane) {
 }
 
 function terminalTheme(theme) {
+  const fallback = state.bootstrap.colors[theme];
+  const selected = { ...fallback, ...state.colors[theme] };
+  const common = { background: selected.terminal_background, foreground: selected.terminal_foreground,
+    cursor: selected.terminal_cursor };
   if (theme === "light") return {
-    background: "#ffffff", foreground: "#21303a", cursor: "#246752", selectionBackground: "#cce8dc",
+    ...common, selectionBackground: "#cce8dc",
     black: "#26333e", red: "#a73145", green: "#217446", yellow: "#785700",
     blue: "#285aa0", magenta: "#794592", cyan: "#176b73", white: "#52616d",
     brightBlack: "#60717d", brightRed: "#ae3b50", brightGreen: "#286c41", brightYellow: "#806312",
     brightBlue: "#305fa3", brightMagenta: "#8a4291", brightCyan: "#16676f", brightWhite: "#465562",
   };
   return {
-    background: "#101316", foreground: "#d9e1e8", cursor: "#82d9bd", selectionBackground: "#335448",
+    ...common, selectionBackground: "#335448",
     black: "#242a30", red: "#df7d85", green: "#90bf8f", yellow: "#d6bc83",
     blue: "#8faedb", magenta: "#b69dcf", cyan: "#85bfc2", white: "#d9e1e8",
     brightBlack: "#65717d", brightRed: "#eea0a5", brightGreen: "#add6a1", brightYellow: "#e3cf9f",
@@ -840,8 +865,25 @@ function terminalTheme(theme) {
   };
 }
 
-function setTheme(theme) {
+function applyAccent(view) {
+  const defaults = state.bootstrap.colors[state.theme];
+  const colors = { ...defaults, ...state.colors[state.theme] };
+  const channels = [1, 3, 5].map(offset => Number.parseInt(colors.accent.slice(offset, offset + 2), 16) / 255);
+  const weights = [0.2126, 0.7152, 0.0722];
+  const luminance = channels.reduce((sum, value, index) =>
+    sum + weights[index] * (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4), 0);
+  view.documentElement.style.setProperty("--accent", colors.accent);
+  view.documentElement.style.setProperty("--accent-fg", luminance >= 0.179 ? "#000000" : "#ffffff");
+  view.documentElement.style.setProperty("--terminal-bg", colors.terminal_background);
+}
+
+function setTheme(theme, colors) {
   state.theme = theme;
+  state.colors = colors;
+  applyAccent(document);
+  for (const group of state.groups) {
+    if (group.floating?.container) applyAccent(group.floating.window.document);
+  }
   for (const pane of state.panes.values()) {
     if (pane.term) pane.term.options.theme = terminalTheme(theme);
   }
@@ -1044,6 +1086,7 @@ async function openSession(
 }
 
 function snapshotOpenTabs() {
+  if (!state.workspaceReady) return null;
   return {
     tabs: state.groups.map(group => ({ panes: [...group.panes], orientation: group.orientation,
       active: group.panes.indexOf(group.active) })),
@@ -1112,10 +1155,11 @@ function removePane(id) {
     if (group.active === id) group.active = group.panes[0];
   }
   state.groups = state.groups.filter((group) => group.panes.length);
-  if (state.active === id) {
-    const group = currentGroup() || state.groups[0];
-    state.activeGroup = group?.id;
-    state.active = group?.active || null;
+  if (state.active === id || !state.groups.some(group => group.id === state.activeGroup)) {
+    const group = state.groups.find(item => item.id === state.activeGroup) ||
+      state.groups.find(item => !item.floating) || state.groups[0];
+    state.activeGroup = group?.id ?? null;
+    state.active = group?.floating ? null : group?.active ?? null;
   }
   renderLayout();
   if (state.active) focusPane(state.active);
@@ -2973,6 +3017,35 @@ async function settingsDialog() {
   const theme = dialog.add("theme", "Тема оформления", state.theme, { full: true, choices: [
     { value: "dark", label: "Тёмная" }, { value: "light", label: "Светлая" },
   ] });
+  const colors = structuredClone(state.colors);
+  let pickerTheme = state.theme;
+  const pickers = Object.fromEntries([
+    ["accent", "Акцент кнопок и активной вкладки"],
+    ["terminal_background", "Фон терминала"],
+    ["terminal_foreground", "Текст терминала"],
+    ["terminal_cursor", "Курсор терминала"],
+  ].map(([key, label]) => [key, dialog.add(key, label, "", { type: "color" })]));
+  const readColors = () => {
+    const defaults = state.bootstrap.colors[pickerTheme];
+    const selected = Object.entries(pickers).filter(([key, picker]) => picker.value !== defaults[key]);
+    if (selected.length) colors[pickerTheme] = Object.fromEntries(selected.map(([key, picker]) => [key, picker.value]));
+    else delete colors[pickerTheme];
+  };
+  const displayColors = () => {
+    const selected = { ...state.bootstrap.colors[pickerTheme], ...colors[pickerTheme] };
+    for (const [key, picker] of Object.entries(pickers)) picker.value = selected[key];
+  };
+  displayColors();
+  theme.addEventListener("change", () => {
+    readColors();
+    pickerTheme = theme.value;
+    displayColors();
+  });
+  dialog.grid.append(el("div", { class: "full" },
+    el("button", { type: "button", text: "Сбросить цвета темы", onclick: () => {
+      delete colors[pickerTheme];
+      displayColors();
+    } })));
   const toggle = checkbox("Записывать диагностический журнал", current.enabled);
   toggle.wrapper.classList.add("full");
   dialog.grid.append(toggle.wrapper);
@@ -2991,9 +3064,13 @@ async function settingsDialog() {
   dialog.grid.append(remember.wrapper, terminalClipboard.wrapper);
   dialog.submit(async () => {
     await api.invoke("logging:save", { enabled: toggle.input.checked, level: level.value });
-    if (theme.value !== state.theme || terminalClipboard.input.checked !== state.terminalClipboard) {
-      const appearance = await api.invoke("app:appearance", { theme: theme.value, terminal_clipboard: terminalClipboard.input.checked });
-      setTheme(appearance.theme);
+    readColors();
+    if (theme.value !== state.theme || terminalClipboard.input.checked !== state.terminalClipboard ||
+        JSON.stringify(colors) !== JSON.stringify(state.colors)) {
+      const appearance = await api.invoke("app:appearance", {
+        theme: theme.value, terminal_clipboard: terminalClipboard.input.checked, colors,
+      });
+      setTheme(appearance.theme, appearance.colors);
       state.terminalClipboard = appearance.terminal_clipboard;
     }
     if (remember.input.checked !== state.rememberTabs)
@@ -3028,15 +3105,24 @@ function help() {
   );
   dialog.show();
 }
-function togglePanel(id) {
+function setPanelVisible(id, visible) {
   const sidebar = id === "sidebar";
   const panel = $(id);
   const toggle = $(sidebar ? "toggle-sidebar" : "toggle-files");
-  panel.hidden = !panel.hidden;
+  panel.hidden = !visible;
   $(sidebar ? "sidebar-resize" : "files-resize").hidden = panel.hidden;
-  toggle.setAttribute("aria-pressed", String(!panel.hidden));
+  toggle.setAttribute("aria-pressed", String(visible));
   toggle.title = (panel.hidden ? "Показать " : "Скрыть ") + (sidebar ? "панель подключений" : "файловую панель");
   scheduleFit();
+}
+async function togglePanel(id) {
+  const visible = $(id).hidden;
+  setPanelVisible(id, visible);
+  try {
+    await api.invoke("app:panel", { panel: id === "sidebar" ? "sidebar" : "files", visible });
+  } catch (error) {
+    throw Error("Не удалось сохранить состояние панели. " + error.message);
+  }
 }
 async function action(name, payload = {}) {
   const id = payload.id || payload.sessionId;
@@ -3528,8 +3614,10 @@ async function boot() {
   const initial = await api.invoke("bootstrap");
   state.bootstrap = initial;
   state.rememberTabs = Boolean(initial.workspace?.remember);
-  state.terminalClipboard = initial.terminalClipboard === true;
-  setTheme(initial.theme === "light" ? "light" : "dark");
+  state.terminalClipboard = initial.appearance.terminal_clipboard;
+  setTheme(initial.appearance.theme, initial.appearance.colors);
+  setPanelVisible("sidebar", initial.appearance.panels.sidebar !== false);
+  setPanelVisible("files-panel", initial.appearance.panels.files !== false);
   state.store = initial.store;
   state.identities = initial.identities;
   state.vault = initial.vault;
@@ -3572,5 +3660,6 @@ async function boot() {
     };
   else if (!initial.identities.configured) await profilesDialog(true);
   await restoreOpenTabs(initial.workspace);
+  state.workspaceReady = true;
 }
 boot().catch(showError);

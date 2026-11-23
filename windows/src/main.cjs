@@ -25,6 +25,7 @@ const { UpdateController } = require('./update-ui.cjs');
 const { BackupDialogs } = require('./backup-ui.cjs');
 const { activeProfile } = require('./backend/backup.cjs');
 const { readWorkspace, captureWorkspace } = require('./backend/startup-tabs.cjs');
+const { COLORS, PANELS, normalizeAppearance, readAppearance } = require('./backend/appearance.cjs');
 
 // DirectComposition paints above foreign native child HWNDs even with HWND_TOP.
 // Keep GPU acceleration; use a redirection surface so the embedded RDP child is visible.
@@ -44,7 +45,7 @@ let profileDirectory;
 let diagnosticLog;
 let sidebarPath;
 let appearancePath;
-let terminalClipboard = false;
+let appearance;
 let appearanceWrites = Promise.resolve();
 let workspacePath;
 let workspacePreferences;
@@ -317,19 +318,30 @@ function persistWorkspace(document) {
 async function saveOpenTabs() {
   await workspaceWrites.catch(() => {});
   if (!workspacePreferences?.remember || !window || window.isDestroyed()) return;
+  let timeout;
   const layout = await Promise.race([
     window.webContents.executeJavaScript('snapshotOpenTabs()'),
-    new Promise(resolve => setTimeout(resolve, 2000).unref())
-  ]);
+    new Promise((_, reject) => {
+      timeout = setTimeout(() => reject(Error('Окно AstraTerm не ответило на запрос.')), 5000);
+    })
+  ]).finally(() => clearTimeout(timeout));
+  if (layout === null) return; // Startup restoration still owns the last saved layout.
   const getProfile = id => (terminals.get(id) || rdp.get(id))?.profile;
   const saved = new Set(store.snapshot().sessions.map(profile => profile.id));
   await persistWorkspace(captureWorkspace(layout, getProfile, saved));
 }
 
-async function finish(exitCode = 0) {
+async function finish(exitCode = 0, requireWorkspace = false) {
   if (finishing) return;
   finishing = true;
-  try { await saveOpenTabs(); } catch { diagnosticLog?.write('warning', 'workspace.save-failed'); }
+  try { await saveOpenTabs(); }
+  catch (error) {
+    diagnosticLog?.write('warning', 'workspace.save-failed');
+    if (requireWorkspace) {
+      finishing = false;
+      throw Error('Не удалось сохранить вкладки. ' + safeError(error));
+    }
+  }
   vault?.lock();
   for (const id of imports.keys())discardImport(id);
   allowClose = true;
@@ -365,10 +377,12 @@ async function requestClose() {
       return;
     }
     const active = [...(terminals?.list()||[]),...(rdp?.list()||[])].filter(record => ['connecting', 'running'].includes(record.status)).length;
-    const detail = [active ? `Будут закрыты активные терминалы: ${active}.` : '', dirtyCount ? `Несохранённых редакторов: ${dirtyCount}. Изменения будут потеряны.` : ''].filter(Boolean).join('\n');
+    const detail = [active ? `Будут закрыты активные терминалы: ${active}.` : '',
+      workspacePreferences?.remember ? 'При следующем запуске AstraTerm откроет сохранённые вкладки.' : '',
+      dirtyCount ? `Несохранённых редакторов: ${dirtyCount}. Изменения будут потеряны.` : ''].filter(Boolean).join('\n');
     if ((active || dirtyCount) && !await confirm('Закрыть AstraTerm?', detail, 'Закрыть')) return;
     if (files?.busy) throw new Error('Дождитесь завершения файловой операции.');
-    await finish();
+    await finish(0, true);
   } catch (error) {
     if (window && !window.isDestroyed()) await dialog.showMessageBox(window, { type: 'error', title: 'AstraTerm', message: safeError(error) });
   } finally { confirmingClose = false; }
@@ -457,7 +471,7 @@ async function openSession(args) {
 async function call(method, args) {
   switch (method) {
     case 'host:stats': return hostStats.read(args.id);
-    case 'bootstrap': return { store: store.snapshot(), identities: identities.list(), vault: vaultState(), platform: process.platform, home: os.homedir(), version: app.getVersion(), appData: profileDirectory, terminals: [...terminals.list(),...rdp.list()], collapsedFolders: [...collapsedFolders], theme: nativeTheme.themeSource, terminalClipboard, workspace: workspacePreferences, smoke: IS_SMOKE };
+    case 'bootstrap': return { store: store.snapshot(), identities: identities.list(), vault: vaultState(), platform: process.platform, home: os.homedir(), version: app.getVersion(), appData: profileDirectory, terminals: [...terminals.list(),...rdp.list()], collapsedFolders: [...collapsedFolders], appearance, colors: COLORS, workspace: workspacePreferences, smoke: IS_SMOKE };
     case 'backup:create': return backups.run(true);
     case 'backup:restore': return backups.run(false);
     case 'sidebar:collapse': {
@@ -669,17 +683,16 @@ async function call(method, args) {
       return workspacePreferences.remember;
     }
     case 'app:appearance': {
-      const { theme, terminal_clipboard } = args;
+      const { theme, terminal_clipboard, colors } = args;
       if (!['dark', 'light'].includes(theme) || typeof terminal_clipboard !== 'boolean')
         throw new Error('Неверные настройки оформления или буфера обмена.');
-      appearanceWrites = appearanceWrites.catch(() => {}).then(async () => {
-        await writeAtomic(appearancePath, JSON.stringify({ theme, terminal_clipboard }));
-        terminalClipboard = terminal_clipboard;
-        nativeTheme.themeSource = theme;
-        if (window && !window.isDestroyed()) window.setBackgroundColor(appBackgroundColor());
-      });
-      await appearanceWrites;
-      return { theme, terminal_clipboard };
+      return persistAppearance(current => ({ ...current, theme, terminal_clipboard, colors: colors ?? current.colors }));
+    }
+    case 'app:panel': {
+      const { panel, visible } = args;
+      if (!PANELS.includes(panel) || typeof visible !== 'boolean') throw Error('Некорректное состояние панели.');
+      await persistAppearance(current => ({ ...current, panels: { ...current.panels, [panel]: visible } }));
+      return visible;
     }
     case 'logging:settings': return { ...diagnosticLog.settings, filename: diagnosticLog.filename };
     case 'logging:save': {
@@ -722,18 +735,28 @@ function appBackgroundColor() {
   return nativeTheme.shouldUseDarkColors ? '#171b20' : '#f3f6f8';
 }
 
+function persistAppearance(update) {
+  appearanceWrites = appearanceWrites.catch(() => {}).then(async () => {
+    const next = normalizeAppearance(update(appearance));
+    await writeAtomic(appearancePath, JSON.stringify(next));
+    if (next.theme !== appearance.theme) {
+      nativeTheme.themeSource = next.theme;
+      if (window && !window.isDestroyed()) window.setBackgroundColor(appBackgroundColor());
+    }
+    appearance = next;
+    return next;
+  });
+  return appearanceWrites;
+}
+
 async function createWindow() {
   profileDirectory = activeProfile(appDirectory);
   workspacePath = path.join(profileDirectory, 'workspace.json');
   workspacePreferences = readWorkspace(workspacePath);
   sidebarPath = path.join(profileDirectory, 'sidebar.json');
   appearancePath = path.join(profileDirectory, 'appearance.json');
-  nativeTheme.themeSource = 'dark';
-  try {
-    const appearance = JSON.parse(fs.readFileSync(appearancePath, 'utf8'));
-    if (appearance?.theme === 'light') nativeTheme.themeSource = 'light';
-    terminalClipboard = appearance?.terminal_clipboard === true;
-  } catch { /* Older profiles start with the default theme. */ }
+  appearance = readAppearance(appearancePath);
+  nativeTheme.themeSource = appearance.theme;
   diagnosticLog = new DiagnosticLog(profileDirectory);
   diagnosticLog.write('info', 'app.start');
   installLocalUI(protocol, path.dirname(__dirname));

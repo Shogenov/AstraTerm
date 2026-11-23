@@ -402,12 +402,14 @@ class TerminalPane(Gtk.Box):
         self.font_size = max(7, min(28, size))
         self.terminal.set_font(Pango.FontDescription("DejaVu Sans Mono {}".format(self.font_size)))
 
-    def set_theme(self, theme):
+    def set_theme(self, theme, overrides=None):
+        from .appearance import palette
         light = theme == 'light'
         colors = LIGHT_PALETTE if light else PALETTE
-        self.terminal.set_colors(rgba("#21303a" if light else "#d9e1e8"),
-                                 rgba("#ffffff" if light else "#101316"), [rgba(color) for color in colors])
-        self.terminal.set_color_cursor(rgba("#246752" if light else "#82d9bd"))
+        selected = palette(theme, overrides or {})
+        self.terminal.set_colors(rgba(selected['terminal_foreground']),
+                                 rgba(selected['terminal_background']), [rgba(color) for color in colors])
+        self.terminal.set_color_cursor(rgba(selected['terminal_cursor']))
 
     def save_output(self, path=None):
         if path is None:
